@@ -1,0 +1,141 @@
+\documentclass{article} 
+\usepackage[utf8]{inputenc}
+
+\title{CIS 510 Computer Vision - Project Proposal:\\
+	Faking COVID-19: Fooling diagnosis with Normalizing flows} 
+\author{Guzman, Luis and Walton, Steven}
+\date{April 2020}
+
+\usepackage{natbib} 
+\usepackage{graphicx} 
+\usepackage{amsmath} 
+
+\begin{document}
+\maketitle
+
+\section{Problem Description}
+\label{intro}
+
+Generative models such as Generative Adversarial Networks (GAN) and Variational
+AutoEncoders (VAE) have recently attracted lots of attention due to  their
+ability to generate novel data which were unseen by the model. For example, a
+GAN that has been trained to learn what a cat looks like is able to generate a
+new cat that has not been seen before\cite{tcdne}. Normalizing flows (NF) are
+a class of Generative Models that learn the probability distribution function
+(PDF) and can evaluate the log-likelihood at runtime. This alows NFs to sample
+from the PDF and generate `new' data. This is useful when the generative
+process is difficult. However, it is yet to be proved if generative machine
+learning models can substitute real generative processes such as simulations.
+In this work, our final objective is to train a generative model using
+normalizing flows to produce Chest X-ray images with pneumonia that are able to
+consistently fool a classifier.
+
+The intent of this project is to learn more about Normalizing Flows and their
+usage. Herein we describe a plan to learn more about these models so that we
+may be able to use them within our own research, which is focused on Generative
+Models. We recognize that this work in itself may not be an appropriate topic
+for publication. Nonetheless, we believe that during the learning process we
+will become more informed on the state-of-the-art uses and that this knowledge
+will lead to more innovative ideas, thus allowing us to form better research
+topics in the area. From our limited knowledge we believe that NF's ability to
+learn the PDF and likelihood will play an important role in the future of
+machine learning.
+
+\subsection{Tasks}
+
+\begin{enumerate} 
+	\item \textbf{Literature Review}: Gaining an understanding of
+		Normalizing Flows, their strengths, weaknesses and the
+		situations where they can be useful. Literature review of
+		relevant NF architectures NICE\cite{nice},
+		RealNVP\cite{real_nvp}, FFJORD\cite{ffjord}, Glow\cite{glow}.  
+	\item \textbf{Learn by Experimentation}: Experiment with model
+		architecture or new bijective functions to include in the
+		flows.  
+	\item \textbf{Modeling With Standard Datasets}: Implement our NF model
+		and test its performance by generating images from toy datasets
+		like FashionMNIST and CIFAR.  
+	\item \textbf{Develop Classifier}: Implement a pneumonia classifier
+		using the Chest X-ray dataset (\textit{stretch goal}).  
+	\item \textbf{Develop NF Pneumonia Model}: Use our NF model to generate
+		fake X-ray images with pneumonia in an attempt to fool the
+		classifier (\textit{stretch goal}).  \end{enumerate}
+
+\section{Member roles} 
+We attempt to break down these tasks so that there is an
+even amount of work between partners. To begin we will first start with task 1,
+literature review, which will continue throughout the project. For this, we
+propose that each member brings one to two papers per week and we discuss what
+we learned from these. We will provide slides as a summary for each paper. The
+second task is to develop simple models of normalizing flows. In this we
+propose that each member develop their own simplified normalizing flow program
+and present it to one another. This will ensure that each member has a
+practical understanding of NFs. Third, we propose to develop the model together
+focusing on a standard dataset. We will combine our efforts from the previous
+work and distribute the workload best when we know more about our individual
+strengths. Finally, we propose that we perform tasks 4 and 5 in parallel,
+leaning on one another's strengths. Throughout this process we will comment our
+code and hold frequent meetings to discuss our choices and ideas, this ensures
+that we help one another strengthen our respective weaknesses. 
+
+\section{Resources and Tools}
+
+\subsection{Datasets} 
+
+\begin{itemize} 
+	\item MNIST\footnote{http://yann.lecun.com/exdb/mnist/} and
+		FashionMNIST\footnote{https://github.com/zalandoresearch/fashion-mnist} 
+	\item CIFAR-10 and CIFAR-100\footnote{https://www.cs.toronto.edu/~kriz/cifar.html}
+	\item Chest X-ray dataset
+\footnote{https://www.kaggle.com/paultimothymooney/chest-xray-pneumonia}
+\end{itemize} 
+
+\subsection{Base Code}
+
+We plan to implement the models in Python using the PyTorch deep learning
+library.
+
+We are also consulting the available code from the relevant papers in our
+literature review: 
+\begin{itemize} 
+	\item NICE\footnote{https://github.com/laurent-dinh/nice} 
+	\item Real-NVP\footnote{https://github.com/tensorflow/models/tree/master/research/real\_nvp}
+	\item Glow\footnote{https://github.com/openai/glow} 
+	\item FFJORD\footnote{https://github.com/lucasdurand/ffjord} 
+\end{itemize}
+
+We will use these codes to strengthen our knowledge of NFs and experiment with
+different configurations. 
+
+\section{Reservations} 
+From our understanding, training NF-based models can be
+time consuming and computationally expensive. Furthermore, it certainly can be
+the case that the results we obtain (generated `fake' images) might not be good
+enough to accomplish our final objective of fooling a pneumonia classifier.
+Additionally, we are concerned about how much we will be able to accomplish
+within the shortened time span of the quarter system, as neither of us have a
+background in Normalizing Flows. 
+
+\section{Relationship to background} 
+
+\subsection{Luis} 
+In Luis's case, he has some previous experience with PyTorch
+and generative models in the form of GANs. However, Normalizing Flows are a
+subject totally new to him that will require considerable literature review and
+effort. From this project, Luis expects to get some insight into the intuition
+and inner workings of normalizing flows and, hopefully, come out with an idea
+that could be applied to his own research.
+
+\subsection{Steven} 
+Steven has previous experience with PyTorch and generative
+models like GANs. He has done some minor literature review on the subject but
+does not feel he has a full grasp on the models. From this project, Steven
+seeks to gain a deeper understanding of Normalizing Flows and to better
+understand how he can apply them to his own research. He believes that Flow
+based models will be helpful within scientific applications of machine
+learning. 
+
+\bibliographystyle{abbrv} 
+\bibliography{references} 
+\end{document}
+

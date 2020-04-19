@@ -1,0 +1,12 @@
+*.sw?
+tags*
+*.aux
+*.log
+*.out
+*.nav
+*.toc
+*.snm
+*.pdf
+*.bst
+*.bbl
+*.blg
