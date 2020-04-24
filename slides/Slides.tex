@@ -1,0 +1,78 @@
+\documentclass[pdf,11pt]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}       % Images
+\graphicspath{{Images/}}
+\usepackage{xcolor}         % Change Colors
+\usepackage{caption}
+\captionsetup[figure]{font=small}
+\usepackage{multimedia}     % Movies!
+\usepackage{tikz}           % Vectored pictures
+%\usepackage{media9}
+%\hypersetup{pdfpagemode=FullScreen} % Presentation Mode
+\usepackage{animate}        % gifs
+\usepackage{tikz}
+\tikzset{
+    ->,
+    level distance = 12em,
+    minimum size=2em,
+    %edge from parent/.style={draw,thick},
+    level 1/.style={sibling distance=6em},
+    level 2/.style={sibling distance=3em},
+    thick/.style = {line width=1.5pt},
+    extra thick/.style = {line width=3.5pt},
+    red node/.style={shape=circle,draw=red,fill=red!40,thick,inner sep=1.2},
+    blue node/.style={shape=circle,draw=blue,fill=blue!40,thick,inner sep=1.2}
+}
+
+\tikzstyle{round}=[thick,draw=black,circle]
+
+% Remove navigation symbols
+\beamertemplatenavigationsymbolsempty
+% Add page number
+\addtobeamertemplate{navigation symbols}{}{%
+    \usebeamerfont{footline}%
+    \usebeamercolor[fg]{footline}%
+    \hspace{1em}%
+    \insertframenumber/\inserttotalframenumber
+}
+
+% Title
+\title{UO 510: Normalizing Flow Research Project
+}
+\author{Luis Guzman \& Steven Walton\\ \small University of Oregon}
+\date{26 Mar 2020}
+
+\usebackgroundtemplate
+{
+    \includegraphics[width=\paperwidth,height=\paperheight]{UO_Simple.png}
+}
+\definecolor{UOYellow}{HTML}{FDCB00}
+\definecolor{UOGreen}{HTML}{424443}
+%\newcommand{\mytitle}[1]{\setcolor{bg=UOYellow,fg=green}\frametitle{{#1}}}
+
+% Formatting
+%\setbeamercolor{title}{fg=white}
+%\setbeamercolor{normal text}{fg=white}
+%\setbeamercolor{structure}{fg=white}        % Adjusts figures and frame titles
+%\setbeamertemplate{frametitle}[default][center]
+%\setbeamerfont{frametitle}{size=\Huge}
+%%\setbeamerfont{normal text}{size=\LARGE}
+%%\setbeamerfont{structure}{size=\LARGE}
+%\setbeamercolor{footline}{fg=UOGreen}
+%%\setbeamerfont{footline}{series=\bfseries}
+
+
+\begin{document}
+\frame{\titlepage}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Use include for new sections
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%\include{NICE}
+%\include{RealNVP}
+%\include{FFJORD}
+%\include{Glow}
+
+\end{document}
