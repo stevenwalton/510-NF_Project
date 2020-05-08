@@ -58,6 +58,7 @@ KEY contribution: $f$ with easy inverse and determinant of Jacobian
     \end{itemize}
 \end{itemize}
 \end{frame}
+
 \begin{frame}{NICE: General coupling layer}
     \begin{itemize}
         \item Create a partition of $x \in \mathbb{R}^D$ using $I_1 = [1, d]$ and $I_2 = [d, D]$
@@ -70,13 +71,14 @@ KEY contribution: $f$ with easy inverse and determinant of Jacobian
         \item Coupling law \\
         $g : \mathcal{R}^{D-d} \times m(\mathcal{R}^d) \longrightarrow \mathcal{R}^{D-d}$
         \item The Jacobian is $\frac{\partial y}{\partial x} =$
-        \begin{bmatrix}
-            I_1 & 0\\
+        $\begin{bmatrix}
+            I_1 & 0 \\
             \frac{\partial y_{I_2}}{\partial x_{I_1}} &  \frac{\partial y_{I_2}}{\partial x_{I_2}}
-        \end{bmatrix}
+        \end{bmatrix}$
         \item And since $I_1$ is an identity matrix of size $d$: $\frac{\partial y}{\partial x} = \frac{\partial y_{I_2}}{\partial x_{I_2}}$
     \end{itemize}
 \end{frame}
+
 \begin{frame}{NICE: Additive coupling layer}
 \begin{itemize}
     \item Additive coupling law: $g(a; b) = a + b$
@@ -95,6 +97,7 @@ KEY contribution: $f$ with easy inverse and determinant of Jacobian
     \end{align*}
 \end{itemize}
 \end{frame}
+
 \begin{frame}{NICE: layered architecture and scaling}
     \begin{itemize}
         \item By composing several layers, a more complex transformation can be obtained.
@@ -161,21 +164,21 @@ KEY contribution: $f$ with easy inverse and determinant of Jacobian
 \begin{frame}{NICE: Results}
     \begin{figure}
         \centering
-        \includegraphics[width=\textwidth]{images/nice_experiments.png}
+        \includegraphics[width=\textwidth]{Images/nice_experiments.png}
         \label{fig:nice_params_results}
     \end{figure}
 \end{frame}
 \begin{frame}{NICE: Results}
     \begin{figure}
         \centering
-        \includegraphics[width=\textwidth, height = 8cm, keepaspectratio]{images/nice_sampling_1.png}
+        \includegraphics[width=\textwidth, height = 8cm, keepaspectratio]{Images/nice_sampling_1.png}
         \label{fig:nice_sampling}
     \end{figure}
 \end{frame}
 \begin{frame}{NICE: Results}
     \begin{figure}
         \centering
-        \includegraphics[width=\textwidth, height = 8cm, keepaspectratio]{images/nice_sampling_2.png}
-        \label{fig:nice_sampling}
+        \includegraphics[width=\textwidth, height = 8cm, keepaspectratio]{Images/nice_sampling_2.png}
+        \label{fig:nice_sampling2}
     \end{figure}
 \end{frame}
