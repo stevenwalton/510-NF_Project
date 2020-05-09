@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 numworkers = 10
-batch_size = 128
+batch_size = 1
 transform = transforms.Compose([
     transforms.ToTensor(),
     ])
@@ -48,8 +48,11 @@ class Coupling(nn.Module):
         self.layers = nn.Sequential(*layers)
 
     def forward(self,x):
-        print("Coupling")
         x = self.layers(x)
+        return x
+
+    def backward(self,x):
+        x = self.layers[::-1](x)
         return x
 
 
@@ -62,6 +65,8 @@ class Additive(nn.Module):
         self.reverse = reverse
 
     def split(self,x):
+        if (type(x) == tuple):
+            x = x[0]
         if len(x.size()) == 4:
             B,C,H,W = x.size()
             size = C*H*W
@@ -74,8 +79,7 @@ class Additive(nn.Module):
         x2.requires_grad_(True)
         return x1,x2
 
-    def forward(self,x,y):
-        print("Into Additive")
+    def forward(self,x):
         if not self.reverse:
             x1,x2 = self.split(x)
         else:
@@ -117,27 +121,38 @@ class Nice(nn.Module):
         for i in range(numLayers):
             layers.append(Additive(dim=dim,reverse=(i%2)))
         layers.append(Scale(dim))
-        self.layers = nn.ModuleList(layers)
+        #self.layers = nn.ModuleList(layers)
+        self.layers = nn.Sequential(*layers)
+        #self.scale = Scale(dim)
 
     def forward(self,x):
-        print("Into fwd")
         x,log_det = self.layers(x)
-        #x = self.layers(x)
-        print("got through fwd")
         return x,log_det
 
     def backward(self,x):
-        x,log_prob = self.layers[-1](x)
+        #x,log_prob = self.layers[::-1](x)
+        x,log_prob = self.layers(x)
         return x,log_prob
 
 
-net = Nice(28**2).to(device)
+dim = 28**2
+net = Nice(dim).to(device)
+#net = Additive(28**2).to(device)
 #print(net)
-prior = torch.distributions.Normal(torch.tensor(0.).to(device),
-                                   torch.tensor(1.).to(device))
+#prior = torch.distributions.Normal(torch.tensor(0.).to(device),
+#                                   torch.tensor(1.).to(device))
+base_distribution = Uniform(torch.zeros(dim).to(device),
+        torch.ones(dim).to(device))
+transforms = [SigmoidTransform().inv, AffineTransform(loc=0, scale=1)]
+logistic = TransformedDistribution(base_distribution, transforms)
+
+gaussian = MultivariateNormal(torch.zeros(dim).to(device),
+        torch.eye(dim).to(device))
+#prior = gaussian
+prior = logistic
 lr = 1e-4
 optimizer = optim.Adam(net.parameters(), lr, eps=1e-4)
-epochs = 1
+epochs = 10
 losses = np.zeros(epochs)
 for epoch in range(epochs):
     running_loss = 0
@@ -146,11 +161,11 @@ for epoch in range(epochs):
         img = img.to(device)
         pred,liklihood = net(img)
         #pred = net(img)
-        #log_prob = prior.log_prob(pred).sum(1)
-        #loss = -torch.mean(liklihood + log_prob)
-        #running_loss += loss.item()
-        #loss.backward()
-        #optimizer.step()
+        log_prob = prior.log_prob(pred).sum(1)
+        loss = -torch.mean(liklihood + log_prob)
+        running_loss += loss.item()
+        loss.backward()
+        optimizer.step()
 
     epoch_loss = running_loss/(i+1)
     losses[epoch] = epoch_loss
@@ -158,6 +173,9 @@ for epoch in range(epochs):
 
 net.eval()
 h = prior.sample((9,))
+#print(h)
+print(type(h))
+print(h.size())
 pred,liklihood = net.backward(h)
 pred = pred.detach().cpu().view(-1,28,28)
 for i in range(9):
