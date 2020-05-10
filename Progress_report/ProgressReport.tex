@@ -1,0 +1,41 @@
+\documentclass[12pt,letter]{article}
+\usepackage{geometry}%\geometry{top=0.75in}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{xcolor} % Color words
+\usepackage{tikz}       % Drawing 
+\usepackage{pgfplots}   % Other plotting
+\usepgfplotslibrary{colormaps,fillbetween}
+\usepackage{placeins}   % Float barrier
+\usepackage{hyperref}   % Links
+\usepackage{tikz-qtree} % Trees
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{multicol}
+\usepackage{graphicx}   % For graphics
+\usepackage{parcolumns}
+\usepackage{listings}   % lstlisting
+\usepackage{pdfpages}
+\usepackage{bm}         % Bold Math
+
+\graphicspath{{../Presentation/Images/}}
+
+\begin{document}
+\title{Normalizing Flows: Progress Report}
+\author{Luis Guzmann and Steven Walton}
+\maketitle
+
+% \include does new pages
+% \input includes as is
+\input{Updates}
+\input{Roles}
+\input{Approach}
+\input{Data}
+\input{nice_implementation}
+\input{Reservations}
+
+\bibliographystyle{abbrv} 
+\bibliography{references} 
+
+\end{document}
