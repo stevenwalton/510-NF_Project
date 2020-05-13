@@ -3,9 +3,21 @@
 %\usepackage{subcaption}
 \section{NICE Implementation}
 
-As mentioned in the proposal, we implemented the NICE\cite{nice} normalizing flow model as a first step. This allowed us to experience first-hand the inner-workings and implementation details of a NF model. We chose to begin with the NICE model because it's the simplest one and laid the groundwork for the other works we use as references. 
+As previously mentioned, we implemented the NICE\cite{nice} normalizing
+flow model as a first step. This allowed us to experience first-hand the
+inner-workings and implementation details of a NF model. We chose to begin with
+the NICE model because it's the simplest one and laid the groundwork for the
+other works we use as references. 
 
-NICE consists in 4 additive coupling layers followed by a Scaling layer. The coupling functions used in the additive coupling layers are MLP networks with 5 hidden layers and 1000 neurons per layer. Model training is performed by passing the dataset images $X$ through the normalizing layers to obtain transformed vectors $H$, then minimizing the log-probability of the $H$ vector with respect to some known prior distribution such as Gaussion or Logistic. Figure \ref{fig:nice_forward} shows an example of an input image (\ref{fig:nice_input}), and its corresponding transformed form after going through the model (\ref{fig:nice_transformed}).
+NICE consists in 4 additive coupling layers followed by a Scaling layer. The
+coupling functions used in the additive coupling layers are MLP networks with 5
+hidden layers and 1000 neurons per layer. Model training is performed by passing
+the dataset images $X$ through the normalizing layers to obtain transformed
+vectors $H$, then minimizing the log-probability of the $H$ vector with respect
+to some known prior distribution such as Gaussion or Logistic. Figure
+\ref{fig:nice_forward} shows an example of an input image
+(\ref{fig:nice_input}), and its corresponding transformed form after going
+through the model (\ref{fig:nice_transformed}).
 
 \begin{figure}[htbp!]
      \centering
