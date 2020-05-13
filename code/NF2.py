@@ -11,10 +11,12 @@ import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 numworkers = 10
-#batch_size = 256
-batch_size=1
+batch_size = 1
+#batch_size=1
 transform = transforms.Compose([
     transforms.ToTensor(),
+    #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    transforms.Normalize((0.5),(0.5)),
     ])
 mnist_data = datasets.MNIST('./datasets', 
                             download=True,
@@ -42,39 +44,24 @@ class LinearBlock(nn.Module):
 class Coupling(nn.Module):
     def __init__(self,dim, numLayers=5):
         super(Coupling,self).__init__()
-        #layers = []
-        #for i in range(numLayers):
-        #    if i == 0:
-        #        #layers.append(nn.Linear(dim//2,1000))
-        #        layers.append(LinearBlock(dim//2,1000))
-        #    elif i == numLayers-1:
-        #        #layers.append(nn.Linear(1000,dim//2))
-        #        layers.append(LinearBlock(dim//2,1000))
-        #    else:
-        #        #layers.append(nn.Linear(1000,1000))
-        #        layers.append(LinearBlock(1000,1000))
-        #    #layers.append(nn.ReLU())
         layers = nn.ModuleList()
         layers.append( LinearBlock(dim//2,1000))
         for i in range(numLayers):
             layers.append(LinearBlock(1000,1000))
         layers.append(LinearBlock(1000,dim//2))
-        #self.layers = nn.ModuleList(layers)
         self.layers = layers
-        #self.layers = nn.Sequential(*layers)
 
     def forward(self,x):
-        #x = self.layers(x)
         for layer in self.layers:
             x = layer(x)
         return x
 
+    '''
     def backward(self,x):
-        #x = self.layers[::-1](x)
         for layer in self.layers[::-1]:
             x = layer(x)
         return x
-
+        '''
 
 class Additive(nn.Module):
     def __init__(self,dim, reverse=False, numLayers=5):
@@ -85,8 +72,6 @@ class Additive(nn.Module):
         self.reverse = reverse
 
     def split(self,x):
-        if (type(x) == tuple):
-            x = x[0]
         if len(x.size()) == 4:
             B,C,H,W = x.size()
             size = C*H*W
@@ -106,7 +91,8 @@ class Additive(nn.Module):
             x2,x1 = self.split(x)
         y1 = x1
         y2 = x2 + self.layers(x1)
-        return torch.cat((y1,y2),dim=1)
+        log_det = torch.zeros(x.size()[0])
+        return torch.cat((y1,y2),dim=1),log_det
 
     def backward(self,x):
         if not self.reverse:
@@ -114,8 +100,10 @@ class Additive(nn.Module):
         else:
             y2,y1 = self.split(x)
         x1 = y1
-        x2 = y2 - self.layers
-        return torch.cat((x1,x2),dim=1)
+        #x2 = y2 - self.layers.backward(x1)
+        x2 = y2 - self.layers(x1)
+        log_det = torch.zeros(x.size()[0])
+        return torch.cat((x1,x2),dim=1),log_det
 
 class Scale(nn.Module):
     def __init__(self,dim=28**2):
@@ -123,45 +111,32 @@ class Scale(nn.Module):
         self.scale = nn.Parameter(torch.ones(1,dim,requires_grad=True))
 
     def forward(self,x):
-        log_det = torch.sum(self.scale,dim=1)
         x = x*torch.exp(self.scale)
+        log_det = torch.sum(self.scale,dim=1)
         return x,log_det
 
     def backward(self,x):
-        log_det = torch.sum(self.scale,dim=1)
         x = x*torch.exp(-self.scale)
+        log_det = torch.sum(-self.scale,dim=1)
         return x,log_det
 
 
 class Nice(nn.Module):
     def __init__(self,dim,numLayers=5):
         super(Nice,self).__init__()
-
-        #layers = []
-        #for i in range(numLayers):
-        #    layers.append(Additive(dim=dim,reverse=(i%2)))
-        #layers = [Additive(dim=dim,reverse=(i%2)) for i in range(4) ]
-        #layers.append(Scale(dim))
-        #self.layers = nn.ModuleList(layers)
-        #self.layers = nn.Sequential(*layers)
-        #self.scale = Scale(dim)
         self.a = nn.ModuleList([Additive(dim=dim, reverse=(i%2)) for i in range(4)] )
         self.s = Scale(dim)
 
     def forward(self,x):
         for layer in self.a:
-            x = layer(x)
+            x,log_det = layer(x)
         x,log_det = self.s(x)
         return x,log_det
 
     def backward(self,x):
-        #x,log_prob = self.layers[::-1].backward(x)
-        #x,log_prob = self.layers(x)
         x,log_prob = self.s(x)
         for layer in self.a[::-1]:
-            x = layer(x)
-
-        #x = self.a[::-1](x)
+            x,log_det = layer.backward(x)
         return x,log_prob
 
 
@@ -178,11 +153,11 @@ logistic = TransformedDistribution(base_distribution, transforms)
 
 gaussian = MultivariateNormal(torch.zeros(dim).to(device),
         torch.eye(dim).to(device))
-#prior = gaussian
-prior = logistic
+prior = gaussian
+#prior = logistic
 lr = 1e-4
 optimizer = optim.Adam(net.parameters(), lr, eps=1e-4)
-epochs = 10
+epochs = 100
 losses = np.zeros(epochs)
 for epoch in range(epochs):
     running_loss = 0
@@ -191,9 +166,11 @@ for epoch in range(epochs):
         img = img.to(device)
         pred,liklihood = net(img)
         #pred = net(img)
-        log_prob = prior.log_prob(pred).sum(1)
-        loss = -torch.mean(liklihood + log_prob)
+        #log_prob = prior.log_prob(pred).sum(1)
+        log_prob = prior.log_prob(pred)
+        loss = -torch.sum(liklihood + log_prob)
         running_loss += loss.item()
+        net.zero_grad()
         loss.backward()
         optimizer.step()
 
@@ -201,6 +178,7 @@ for epoch in range(epochs):
     losses[epoch] = epoch_loss
     print(f"Epoch {epoch} completed with loss {epoch_loss}")
 
+torch.save(net.state_dict(), "NF2.pt")
 net.eval()
 h = prior.sample((9,))
 #print(h)
@@ -213,3 +191,30 @@ for i in range(9):
 plt.subplots_adjust(bottom=0.1, right=0.8,top=0.9)
 plt.savefig("NFOut.png")
 print(f"Liklihood {liklihood.item()}")
+
+'''
+plt.clf()
+#fig,axes = plt.subplots(1)
+img = img[0]
+#axes[0] = plt.imshow(img.detach().cpu().squeeze().view(28,28),cmap=plt.cm.binary)
+pred,_ = net(img.unsqueeze(0))
+pred = pred.detach().cpu()
+#axes[1] = plt.imshow(pred.view(28,28),cmap=plt.cm.binary)
+plt.imshow(pred.view(28,28),cmap=plt.cm.binary)
+#pred = pred.view(-1)
+#pred = pred.detach().cpu()
+#back,_ = net.backward(pred)
+#back = back.detach().cpu().squeeze().view(-1,28,28)
+#axes[2] = plt.imshow(back, cmap=plt.cm.binary)
+#print(back.size())
+#plt.imshow(back, cmap=plt.cm.binary)
+#print("Axes[2]")
+plt.savefig("inout.png")
+#pred,_ = net.forward(h)
+#pred = pred.detach().cpu().view(-1,28,28)
+#for i in range(9):
+#    plt.subplot(3,3,i+1)
+#    plt.imshow(pred[i],cmap=plt.cm.binary)
+#plt.subplots_adjust(bottom=0.1, right=0.8, top=0.9)
+#plt.savefig("NFForward.png")
+'''
