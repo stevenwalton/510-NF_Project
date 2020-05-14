@@ -48,7 +48,7 @@ class Coupling(nn.Module):
         layers.append( LinearBlock(dim//2,1000))
         for i in range(numLayers):
             layers.append(LinearBlock(1000,1000))
-        layers.append(LinearBlock(1000,dim//2))
+        layers.append(LinearBlock(1000,dim//2,reg=False))
         self.layers = layers
 
     def forward(self,x):
@@ -92,7 +92,11 @@ class Additive(nn.Module):
         y1 = x1
         y2 = x2 + self.layers(x1)
         log_det = torch.zeros(x.size()[0])
-        return torch.cat((y1,y2),dim=1),log_det
+        if not self.reverse:
+            o = torch.cat((y2,y1),dim=1)
+        else:
+            o = torch.cat((y1,y2),dim=1)
+        return o,log_det
 
     def backward(self,x):
         if not self.reverse:
@@ -103,7 +107,11 @@ class Additive(nn.Module):
         #x2 = y2 - self.layers.backward(x1)
         x2 = y2 - self.layers(x1)
         log_det = torch.zeros(x.size()[0])
-        return torch.cat((x1,x2),dim=1),log_det
+        if not self.reverse:
+            o = torch.cat((x2,x1),dim=1)
+        else:
+            o = torch.cat((x1,x2),dim=1)
+        return o,log_det
 
 class Scale(nn.Module):
     def __init__(self,dim=28**2):
@@ -134,9 +142,9 @@ class Nice(nn.Module):
         return x,log_det
 
     def backward(self,x):
-        x,log_prob = self.s(x)
+        x,log_prob = self.s.backward(x)
         for layer in self.a[::-1]:
-            x,log_det = layer.backward(x)
+            x,_= layer.backward(x)
         return x,log_prob
 
 
@@ -153,8 +161,8 @@ logistic = TransformedDistribution(base_distribution, transforms)
 
 gaussian = MultivariateNormal(torch.zeros(dim).to(device),
         torch.eye(dim).to(device))
-prior = gaussian
-#prior = logistic
+#prior = gaussian
+prior = logistic
 lr = 1e-4
 optimizer = optim.Adam(net.parameters(), lr, eps=1e-4)
 epochs = 100
@@ -176,7 +184,19 @@ for epoch in range(epochs):
 
     epoch_loss = running_loss/(i+1)
     losses[epoch] = epoch_loss
-    print(f"Epoch {epoch} completed with loss {epoch_loss}")
+    h = prior.sample((9,))
+    #print(h)
+    pred,liklihood = net.backward(h)
+    print(f"Epoch {epoch} completed: Loss {epoch_loss}, Liklihood: {liklihood.item()}")
+    #pred,liklihood = net.forward(h)
+    pred = pred.detach().cpu().view(-1,28,28)
+    for i in range(9):
+        plt.subplot(3,3,i+1)
+        plt.imshow(pred[i],cmap=plt.cm.binary)
+    plt.subplots_adjust(bottom=0.1, right=0.8,top=0.9)
+    plt.savefig("NFOut_" + str(epoch) + ".png")
+    torch.save(net.state_dict(), "NF2_" + str(epoch) + ".pt")
+    plt.clf()
 
 torch.save(net.state_dict(), "NF2.pt")
 net.eval()
