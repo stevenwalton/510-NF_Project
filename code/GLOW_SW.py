@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch import optim
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.distributions import Uniform, TransformedDistribution, MultivariateNormal
 from torch.distributions.transforms import SigmoidTransform, AffineTransform
@@ -41,6 +42,130 @@ class LinearBlock(nn.Module):
             x = self.reg(x)
         return x
 
+class Actnorm(nn.Module):
+    def __init__(self,
+                 dims,
+                ):
+        super(Actnorm, self).__init__()
+        self.s = nn.Parameter(torch.ones(dims))
+        self.b = nn.Parameter(torch.zeros(dims))
+
+    def forward(self,x):
+        y = torch.add(torch.mul(self.s,x), self.b)
+        logdet = torch.mul(torch.mul(h,w), torch.sum(torch.abs(s)))
+        return y, logdet
+
+    def backward(self,y):
+        x = torch.div(torch.sub(y,self.b),self.s)
+        return x
+
+class InvertConv(nn.Module):
+    def __init__(self,
+                 c,
+                ):
+        super(InvertConv, self).__init__()
+        #W = torch.tensor([[torch.cos(torch.rand(1)), -torch.sin(torch.rand(1))],
+        #                   [torch.sin(torch.rand(1)), torch.cos(torch.rand(1))]])
+        self.c = c
+        W = torch.rand(c,c)
+        self.W = nn.Parameter(W)
+
+    def forward(self, x):
+        b,c,h,w = x.size()
+        y = F.conv2d(x,self.W.view(self.c,self.c,1,1))
+        logdet = h*w*torch.sum(torch.log(torch.abs(self.s)))
+        return y, logdet
+
+    def backward(self, y):
+        x = torch.mul(torch.inverse(self.W,y))
+        return x
+
+class FlowStep(nn.Module):
+    def __init__(self,
+                 c,
+                 reverse,
+                 ):
+        super(FlowStep,self).__init__()
+        self.an = ActNorm()
+        self.inv = InvertConv(c)
+        self.affine = AffineCoupling(reverse)
+
+    def forward(self,x):
+        x,logdet = self.an.forward(x)
+        x,logdet = self.inv.forward(x)
+        x,logdet = self.affine.forward(x)
+        return x, logdet
+
+    def backward(self,y):
+        y = self.affine.backward(y)
+        y = self.inv.backward(y)
+        y = self.an.backward(y)
+        return y
+
+
+class AffineCoupling(nn.Module):
+    def __init__(self,
+                 c=512,
+                 reverse=False,
+                ):
+        super(AffineCoupling,self).__init__()
+        self.NN = nn.Sequential(nn.Conv2d(c//2,c,kernel_c=3),
+                                nn.ReLU(),
+                                nn.Conv2d(c,c,kernel_c=1),
+                                nn.ReLU(),
+                                )
+        self.reverse = reverse
+        W = torch.zeros(c,c)
+        self.W = nn.Parameter(W)
+        self.c = c
+
+    def split(self,x):
+        if len(x.size()) == 4:
+            B,C,H,W = x.size()
+            size = C*H*W
+        else:
+            B,size = x.size()
+        x = x.reshape(B,-1)
+        x1 = x[:,size//2:]
+        x1.requires_grad_(True)
+        x2 = x[:,:size//2]
+        x2.requires_grad_(True)
+        return x1,x2
+
+    def forward(self,x):
+        if not self.reverse:
+            x_a,x_b = self.split(x)
+        else:
+            x_b,x_a = self.split(x)
+        o = self.NN(x_b)
+        o = F.conv2d(o, self.W.view(self.c,self.c,1,1))
+        #log_s, t = self.NN.forward(x_b)
+        s = torch.exp(log_s)
+        y_a = torch.add(torch.mult(s,x_a),t)
+        y_b = x_b
+        if not self.reverse:
+            y = torch.cat((y_a,y_b), dim=1)
+        else:
+            y = torch.cat((y_b,y_a), dim=1)
+
+        logdet = torch.sum(torch.log(torch.abs(s)))
+        return y, logdet
+
+    def backward(self,y):
+        if not self.reverse:
+            y_a, y_b = self.split(y)
+        else:
+            y_b, y_a = self.split(y)
+        log_s, t = self.NN.backward(y_b)
+        s = torch.exp(log_s)
+        x_a = torch.div(torch.sub(y_a,t),s)
+        x_b = y_b
+        if not self.reverse:
+            x = torch.cat((x_a, x_b), dim=1)
+        else:
+            x = torch.cat((x_b, x_a), dim=1)
+        return x
+
 class Coupling(nn.Module):
     def __init__(self,dim, numLayers=5):
         super(Coupling,self).__init__()
@@ -55,13 +180,6 @@ class Coupling(nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
-
-    '''
-    def backward(self,x):
-        for layer in self.layers[::-1]:
-            x = layer(x)
-        return x
-        '''
 
 class Additive(nn.Module):
     def __init__(self,dim, reverse=False, numLayers=5):
