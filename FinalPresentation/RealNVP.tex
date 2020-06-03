@@ -9,6 +9,50 @@
 \end{itemize}
 \end{frame}
 
-\begin{frame}
-    \frametitle{RealNVP (Luis)}
+\begin{frame}{Real-valued Non-Volume-Preserving Transformations}
+\begin{itemize}
+    \item Affine coupling layers
+    \begin{itemize}
+        \item Again, create a partition $x \longrightarrow \{x_1, x_2\} $
+        \item $y_1 = exp(S) \odot x_1 + b$
+        \item $y_2 = x_2$
+        \item $S \longrightarrow CNN(x_2)$
+        \item $b \longrightarrow CNN(x_2)$
+    \end{itemize}
+    \item Inverse
+        \begin{itemize}
+            \item $x_1 = (y_1 - b) \odot exp(-S)$
+        \end{itemize}
+    \item Log-determinant
+        \begin{itemize}
+            \item $sum(log(|S|))$
+        \end{itemize}
+\end{itemize}
+
 \end{frame}
+
+\begin{frame}{Real-valued Non-Volume-Preserving Transformations}
+    \begin{itemize}
+        \item Multi-scale framework
+        \begin{itemize}
+            \item Squeeze
+            \begin{itemize}
+                \item Trade spatial size for number of channels
+                \item Transforms an $s \times s \times c$ tensor to $\frac{s}{2} \times \frac{s}{2} \times 4c$
+            \end{itemize}
+            \item Split
+            \begin{itemize}
+                \item Half of the features are factored out
+                \item Distributes loss function
+                \item Helps train deeper models
+            \end{itemize}
+        \end{itemize}
+    \end{itemize}
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.7\textwidth]{Images/realnvp_squeeze.png}
+        %\caption{Caption}
+        %\label{fig:my_label}
+    \end{figure}
+\end{frame}
+

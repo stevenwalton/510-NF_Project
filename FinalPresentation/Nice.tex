@@ -9,7 +9,75 @@
 \end{itemize}
 \end{frame}
 
-\begin{frame}
-    \frametitle{NICE (Luis)}
+\begin{frame}{NICE: Non-linear Independent Components Estimation}
+\begin{itemize}
+    \item Key contributions is finding a function with:
+    \begin{itemize}
+        \item Easy determinant
+        \item Easy inverse
+    \end{itemize}
+    \item General coupling layer
+    \begin{itemize}
+        \item Create a partition of $x \in \mathbb{R}^D$ using $I_1 = [1, d]$ and $I_2 = [d, D]$
+        \item Define $y = (y_{I_1}, y_{I_2})$
+            \begin{align*}
+                y_{I_1} &= x_{I_1} \\
+                y_{I_2} &= g(x_{I_2}; m(x_{I_1}))
+            \end{align*}
+        \item $m : \mathcal{R}^d \longrightarrow \mathcal{R}^{D-d}$
+        \item The Jacobian is $\frac{\partial y}{\partial x} =$
+        $\begin{bmatrix}
+            I_1 & 0 \\
+            \frac{\partial y_{I_2}}{\partial x_{I_1}} &  \frac{\partial y_{I_2}}{\partial x_{I_2}}
+        \end{bmatrix} = \frac{\partial y_{I_2}}{\partial x_{I_2}}$ 
+    \end{itemize}
+\end{itemize}
 \end{frame}
-
+\begin{frame}{NICE: Additive coupling layer}
+\begin{itemize}
+    \item Additive coupling law: $g(a; b) = a + b$
+    \begin{align*}
+                y_{I_1} &= x_{I_1} \\
+                y_{I_2} &= x_{I_2} + m(x_{I_1})
+    \end{align*}
+    \item Inverse
+    \begin{align*}
+                x_{I_1} &= y_{I_1} \\
+                x_{I_2} &= y_{I_2} - m(x_{I_1})
+    \end{align*}
+    \item Jacobian determinant
+    \begin{align*}
+        \text{det} \; \frac{\partial y_{I_2}}{\partial x_{I_2}} = 1
+    \end{align*}
+    \item $m$ coupling functions are NN with linear outputs.
+\end{itemize}
+\end{frame}
+\begin{frame}{NICE: layered architecture and scaling}
+    \begin{itemize}
+        \item Composing several layers
+        \begin{itemize}
+            \item More complex transformations
+        \end{itemize}
+        \item Part of the input unchanged
+        \begin{itemize}
+            \item Exchange the role of the two subsets
+        \end{itemize}
+        \item Volume preserving determinants
+        \begin{itemize}
+            \item Diagonal scaling matrix $S$ at the top layer.
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+\begin{frame}{NICE: layered architecture and scaling}
+\begin{align*}
+    h_{I_1}^{(1)} &= x_{I_1}\\
+    h_{I_2}^{(1)} &= x_{I_2} + m^{(1)}(x_{I_1})\\ 
+    h_{I_2}^{(2)} &= h_{I_2}^{(1)}\\
+    h_{I_1}^{(2)} &= h_{I_1}^{(1)} + m^{(2)}(x_{I_2})\\ 
+    h_{I_1}^{(3)} &= h_{I_1}^{(2)}\\
+    h_{I_2}^{(3)} &= h_{I_2}^{(2)} + m^{(3)}(x_{I_1})\\ 
+    h_{I_2}^{(4)} &= h_{I_2}^{(3)}\\
+    h_{I_1}^{(4)} &= h_{I_1}^{(3)} + m^{(4)}(x_{I_2})\\ 
+    h &= \text{exp}(S) \odot h^{(4)}
+\end{align*}
+\end{frame}
