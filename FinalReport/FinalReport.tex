@@ -1,0 +1,67 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage{cvpr}
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Include other packages here, before hyperref.
+
+% If you comment hyperref and then uncomment it, you should delete
+% egpaper.aux before re-running latex.  (Or just hit 'q' on the first latex
+% run, let it finish, and you should be clear).
+\usepackage[breaklinks=true,bookmarks=false]{hyperref}
+
+\cvprfinalcopy % *** Uncomment this line for the final submission
+
+\def\cvprPaperID{****} % *** Enter the CVPR Paper ID here
+\def\httilde{\mbox{\tt\raisebox{-.5ex}{\symbol{126}}}}
+
+% Pages are numbered in submission mode, and unnumbered in camera-ready
+%\ifcvprfinal\pagestyle{empty}\fi
+\setcounter{page}{1}
+\begin{document}
+
+%%%%%%%%% TITLE
+\title{Fooling Pneumonia Classification with Normalizing Flows}
+
+\author{Luis Guzman\\
+University of Oregon\\
+{\tt\small lguzman@uoregon.edu}
+% For a paper whose authors are all at the same institution,
+% omit the following lines up until the closing ``}''.
+% Additional authors and addresses can be added with ``\and'',
+% just like the second author.
+% To save space, use either the email address or home page, not both
+\and
+Steven Walton\\
+University of Oregon\\
+{\tt\small swalton2@uoregon.edu}
+}
+
+\maketitle
+%\thispagestyle{empty}
+
+%%%%%%%%% ABSTRACT
+\begin{abstract}
+    In this work we present a normalizing flow network based off of GLOW that is
+    able to fool several deep neural network classifiers over 96\% of the time.
+    This work shows that normalizing flows are able to generate quality images,
+    meaning that the learn the distribution with reasonable accuracy. 
+\end{abstract}
+
+%%%%%%%%% BODY TEXT
+\input{Introduction}
+\input{Details}
+\input{Results}
+\input{Discussion}
+\input{Statement}
+
+{\small
+\bibliographystyle{ieee_fullname}
+\bibliography{egbib}
+}
+
+\end{document}
