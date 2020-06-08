@@ -2,4 +2,32 @@
 Normalizing Flows are a powerful type of generative model, similar to Generative
 Adversarial Networks (GANs) and Variational Autoencoders (VAEs). While GANs and
 VAEs implicitly learn the distribution of a dataset, Normalizing Flows
-explicitly learn the distribution.
+explicitly learn the distribution. In this project we attempt to learn the
+explicit representation of pneumonia cases in x-rays. To test the effectiveness
+of this learning we train classical classifiers on this dataset and have them
+classify our generated images.
+
+\subsection{Related Work}
+Generative models are a popular framework for machine learning because they are
+able to generate new instances of a dataset. For example, a model that has
+trained on what cats look like is able to generate a new cat, an example of
+which can be found with the popular website
+ThisCatDoesNotExist.com~\cite{tcdne}. GANs have become popular types of
+generative models because they are able to produce high quality and realistic
+images. Normalizing flows have gained attention because of their ability to
+learn the exact dataset and get the logliklihood while still producing sharp
+images. 
+
+NICE~\cite{nice}, Non-Linear Independent Component Estimation,  was a
+foundational work on normalizing flows demonstrating that with a simple flow
+model a high-dimensional dataset could be learned. NICE uses a simple additive
+coupling layer, using a linear function. They simplified the inverse function by
+using a function that has a unit Jacobian determinant. This makes the inverse
+trivial to compute, since the determinant is 1. While NICE isn't competitive
+with GANs from the same time, it did demonstrate that normalizing flows can be
+easily trained and constructed.
+
+RealNVP~\cite{realnvp}, which stands for real-valued non-volume preserving, was
+a follow-up paper to NICE that improved on the results. 
+
+\subsection{Normalizing Flows}
