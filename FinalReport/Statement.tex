@@ -1,1 +1,21 @@
 \section{Statement of Individual Contributions}
+Both participants of this project contributed equally. The beginning of the
+project focused on research within the area of normalizing flows. Steven
+presented the idea of working with normalizing flows after reading Lilian Weng's
+blog~\cite{weng2018flow} and Luis suggested using them to generate fake Covid
+data, which we settled on just pneumonia cases since we found clearer and larger
+datasets for that. 
+
+The first step of the project was to build our background understanding. So we
+each read NICE, RealNVP, GLOW, and FFJORD. We split these up so that each person
+dug deeper on an individual paper. We then set up a Zoom meeting where we each
+made slides and presented a deeper understanding of the papers to one another. 
+Luis presented on NICE and FFJORD while Steven presented on RealNVP and GLOW. 
+
+The next step both Luis and Steven independently tried to replicate the NICE
+paper. When either one was confused on one section they consulted with the
+other. Both ended up producing a network that was able to produce similar images
+to NICE. The process was then repeated for advancing to GLOW. For the results we
+used LUIS's network because his results turned out better than Steven's. We then
+retrained AlexNet, ResNet, and VGG to perform a binary classification on the
+pneumonia dataset. 

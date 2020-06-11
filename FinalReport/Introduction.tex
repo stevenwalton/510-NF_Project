@@ -1,13 +1,31 @@
 \section{Introduction} 
+Machine learning is a stochastic process to ``learn'' information about some
+dataset. One common task is to learn what a probability density function (pdf) 
+of some dataset. Typically this is done by using data to learn a pdf that is
+reasonably close enough that it is difficult to distinguish between the real pdf
+and the learned on.
 Normalizing Flows are a powerful type of generative
 model, similar to Generative Adversarial Networks (GANs) and Variational
 Autoencoders (VAEs). An example of GANs, VAEs, and Normalizing Flow
 architectures can be viewed in Figure~\ref{fig:gens}. While GANs and VAEs
 implicitly learn the distribution of a dataset, Normalizing Flows explicitly
-learn the distribution. In this project we attempt to learn the explicit
+learn the distribution. The advantage of learning an exact pdf is that when
+you learn the exact pdf you can evaluate a specific sample. In GANs and VAEs you
+cannot do this.  . For example, if one learned a distribution of faces you could
+sample a face with blond hair and a sample with brown hair and you can
+interpolate images between, by sampling from different regions. This allows for
+a better exploration of the density function.
+
+In this project we attempt to learn the explicit
 representation of pneumonia cases in x-rays. To test the effectiveness of this
 learning we train classical classifiers on this dataset and have them classify
 our generated images.
+
+\begin{figure}[ht]
+\center\includegraphics[width=\columnwidth]{GenerativeModels.png}
+\caption{Different Generative Flows~\cite{weng2018flow}}
+\label{fig:gens}
+\end{figure}
 
 \subsection{Related Work}
 Generative models are a popular framework for machine learning because they are
@@ -23,33 +41,69 @@ images.
 NICE~\cite{nice}, Non-Linear Independent Component Estimation,  was a
 foundational work on normalizing flows demonstrating that with a simple flow
 model a high-dimensional dataset could be learned. NICE uses a simple additive
-coupling layer, using a linear function. They simplified the inverse function by
+coupling layer, using a linear function. The computational graph for NICE is
+identical to that of RealNVP, which is shown in Figure~\ref{fig:compGraph}
+Nice simplified the inverse function by
 using a function that has a unit Jacobian determinant. This makes the inverse
 trivial to compute, since the determinant is 1. While NICE isn't competitive
 with GANs from the same time, it did demonstrate that normalizing flows can be
-easily trained and constructed.
+easily trained and constructed. This work demonstrated their network on MNIST,
+SVHN, CIFAR-10, and TFD.
 
 RealNVP~\cite{realnvp}, which stands for real-valued non-volume preserving, was
 a follow-up paper to NICE that improved on the results. This network was deeper
 and non-volume preserving. One of the major changes in this model is introducing
 the multi-scale architecture and using the squeeze operation. The squeeze
 operation makes the sampling more efficient in the model and RealNVP is able to
-produce significantly better images.
+produce significantly better images. The squeezing operation divides the width
+and heigh of an image by 2 and increases the channel size by a factor of 4. 
+The multi-scale architecture works by using 3 alternating masked coupling
+layers, applying a squeeze operation, and then 3 more alternating masked
+coupling layers. Then half of the dimensions are factored out at regular
+intervals. These factors are combined back in at the end of the network. 
+RealNVP performed experiments on CIFAR-10, Imagenet, LSUN (bedroom, tower, and
+church outdoor), and CelebA. While these results still were not competitive with
+GANs of the time they were significant improvements upon NICE.
+%
+\begin{figure}
+\center\includegraphics[width=\columnwidth]{RealNVPComputationalGraph.png}
+\caption{RealNVP Computational Graph}
+\label{fig:compGraph}
+\end{figure}
+%
 
 GLOW~\cite{glow} significantly improved upon these works in several fashions.
 GLOW uses a 1x1 convolutional network to act as the permutation matrix between
-layers. Additionally, the network is much deeper. For comparison, NICE has 5
+layers, this replaces the alternating layers that NICE and RealNVP used. 
+Additionally, the network is much deeper. The other major difference between
+GLOW and RealNVP is that it used a different structure. GLOW can be though of as
+having two major components, a flow step and a multi-scale architecture. The
+flow step is composed of an actnorm layer, a 1x1 invertible convolutional layer,
+and an affine coupling layer -- similar to NICE and RealNVP. The multi-scale
+architecture is composed of a squeeze, k steps of flow, and a split. This
+structure is repeated L-1 times and finishes with an additional squeeze and k
+steps of flow. This is what makes GLOW so much more complex of a network than
+the previous works. For comparison, NICE has 5
 flow steps while GLOW has 32 flow steps per level and 3 levels, for a total of
 96 flow steps. GLOW has many more parameters that are learned and this network
-shows that this allows for substantially better results. While GLOW did not yet
-reach competitive results compared to GANs it showed that there was potential to
-normalizing flows.
-
-\begin{figure}[ht]
-\center\includegraphics[width=\columnwidth]{GenerativeModels.png}
-\caption{Different Generative Flows~\cite{weng2018flow}}
-\label{fig:gens}
+shows that this allows for substantially better results. GLOW also showed that
+because they learned the exact pdf that they are able to interpolate between
+different parts of the distribution. An example of this is shown in
+Figure~\ref{fig:glowinterp} where they can interpolate between smiling and
+non-smiling images, dark and light hair, and old and you faces. This is a task
+not possible when learning an implicit distribution function.
+%
+\begin{figure}
+\center\includegraphics[width=\columnwidth]{GLOWinterp.png}
+\caption{Interpolation through probability density function with GLOW}
+\label{fig:glowinterp}
 \end{figure}
+%
+While GLOW did not yet
+reach competitive results compared to GANs it showed that there was potential to
+normalizing flows. They also demonstrated the unique capabilities of the
+network.
+
 
 \subsection{Normalizing Flows}
 Normalizing Flows are unsupervised generative models that try to learn the exact
@@ -60,6 +114,7 @@ function of some other variable $Z=g(x)$. In the case of normalizing flows we
 use a prior probability distribution $p_Z$ on a latent variable $z\in Z$ and a
 bijective function $f: X\mapsto Z$ (with $g = f^{-1}$ then we can find the
 distribution on $X$ as
+%
 \begin{equation}
     p_X(x) = p_Z(f(x))\left | det\left(\frac{\partial f(x)}{\partial x^T}
         \right)\right |
@@ -69,16 +124,19 @@ Commonly this is written with the log form for easier computation
     \log(p_X(x)) = \log(p_Z(f(x))) + \log\left(\left| det \left(
             \frac{\partial f(x)}{\partial x^T} \right) \right | \right )
 \end{equation}
+%
 Where $\frac{\partial f(x)}{\partial x^T}$ is the Jacobian of $f$ at $x$. The
 Jacobian is difficult to solve computationally and many works, such as the three
 above, solve this by using LU decomposition. This makes it easier because that
 creates a triangular matrix, where the determinant can be solved as the product
 of the diagonal elements. 
+%
 \begin{equation}
     \frac{\partial f(x)}{\partial x^T} = \begin{bmatrix} I_d & 0 \\ \frac{\partial
     z_{I_2}}{\partial x_{I_2}} & \frac{\partial z_{I_2}}{\partial
     x_{I_2}}\end{bmatrix}
 \end{equation}
+%
 By using LU decomposition this turns the computation from $\mathcal{O}(n^3)$ to
 $\mathcal{O}(n)$~\cite{glow}.
 
@@ -86,19 +144,21 @@ This change of variables formula is what makes normalizing flows work. A
 bijective function is used to learn from one probability distribution to
 another, and the reverse. Figure~\ref{fig:nf} shows how bijective functions are
 stacked together.
-
+%
 \begin{figure}[ht]
 \center\includegraphics[width=\columnwidth]{NFs.png}
 \caption{Flow Layers of Normalizing Flows~\cite{weng2018flow}}
 \label{fig:nf}
 \end{figure}
-
+%
 By stacking multiple bijective functions together one can think of it as
 increasing the polynomial fit to the function. A common bijective function used
 in normalizing flows is the simple linear equation $y = \sigma x + \mu$. This
 function is easy to compute and trivially invertible. One step of flow results
 in a polynomial fit of $x$ while $n$ steps of flow represents a polynomial fit
-of $x^n$. 
+of $x^n$. One important feature that is missing from the figure is that there is
+a permutation between each flow step. This is what GLOW learns with its 1x1
+convolution and what Nice and RealNVP perform by shuffling between layers.
 
 These qualities make normalizing flows tractable and give it many benefits. The
 problem with them is that they are more computationally expensive, compared to
