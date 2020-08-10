@@ -33,7 +33,7 @@ class ActNorm(nn.Module):
         super(ActNorm, self).__init__()
         self.uninitialized = True
 
-    def initialize(self, s,b):
+    def initialize(self, x):
         '''
         Write more here
         '''
@@ -44,8 +44,8 @@ class ActNorm(nn.Module):
         means = means.view(1, channels, 1, 1)
         stds = stds.view(1, channels, 1, 1)
         
-        self.register_parameter('b', means)
-        self.register_parameter('s', stds)
+        self.register_parameter('b', nn.Parameter(means))
+        self.register_parameter('s', nn.Parameter(stds))
         self.uninitialized = False
 
     def forward(self, x):
@@ -161,7 +161,7 @@ class Squeeze(nn.Module):
         super(Squeeze, self).__init__()
 
     def forward(self, x):
-        _, C, H, W = x.shape()
+        _, C, H, W = x.shape
         x = x.reshape(-1, C, H//2, 2, W//2, 2)
         x = x.permute(0, 1, 3, 5, 2, 4)
         x = x.reshape(-1, 4*C, H//2, W//2)
@@ -223,16 +223,16 @@ class GLOWStep(nn.Module):
             self.affine = AffineCouplingLayer(channels)
 
     def forward(self, x):
-        log_det_sum = 0
+        log_det_sum = 0.
         # ActNorm
         y, log_det = self.actnorm(x)
-        log_det_sum += log_det
+        log_det_sum = log_det_sum + log_det
         # Invert 1x1
         y, log_det = self.invert_conv(y)
-        log_det_sum += log_det
+        log_det_sum = log_det_sum + log_det
         # Affine
         y, log_det = self.affine(y)
-        log_det_sum += log_det
+        log_det_sum = log_det_sum + log_det
 
         return y, log_det_sum
 
@@ -284,12 +284,12 @@ class GLOWLevel(nn.Module):
         return y, log_det_sum
 
 class GLOW(nn.Module):
-    def __init__(self, channels, depth, levels, additive=False):
+    def __init__(self, channels, depth, n_levels, additive=False):
         super(GLOW, self).__init__()
         self.levels = nn.ModuleList(
-                [GLOWLevel(channels*2**i, depth, additive) for i in range(levels-1)])
+                [GLOWLevel(channels*2**i, depth, additive) for i in range(n_levels-1)])
         self.squeeze = Squeeze()
-        last_n_channels = channels*2**(levels-1)
+        last_n_channels = channels*2**(n_levels-1)
         self.steps = nn.ModuleList(
                 [GLOWStep(last_n_channels, additive) for _ in range(depth)])
 
