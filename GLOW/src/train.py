@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch import nn
 from torch import optim
 from torch.distributions import Normal
 import torchvision
@@ -12,12 +13,14 @@ def train(dataset_name = 'celeb',
           nepochs=1,
           eval_freq=10,
           lr=1e-4,
-          batch_size=32,
+          batch_size=20,
           cuda=False,
           channels=3,
           size=32,
-          depth=24,
-          n_levels=4,
+          #depth=24,
+          depth=1,
+          #n_levels=4,
+          n_levels=3,
           std=0.7,
           n_bits=4,
           download=True,
@@ -100,10 +103,12 @@ def train(dataset_name = 'celeb',
         for i, (imgs, _) in enumerate(trainloader):
             optimizer.zero_grad()
             zs, log_det = model(imgs.to(device))
-            prior_logprob = torch.sum(prior.log_prob(z).sum([1,2,3]) for z in zs)
+            # Fix to torch.sum
+            prior_logprob = sum(prior.log_prob(z).sum([1,2,3]) for z in zs)
+            log_prob = prior_logprob + log_det
 
             # Bits per pixel
-            log_prob /= (torch.log(2) * channels * size * size)
+            log_prob /= (np.log(2) * channels * size * size)
             loss = -log_prob.mean()
             if loss == float('inf'):
                 print(f"Something went wrong! Loss is {loss}")

@@ -146,6 +146,7 @@ class InvertibleConvolution(nn.Module):
                                             torch.randn(channels, channels)))
 
     def forward(self, x):
+        b, a, c, d = x.shape
         y = F.conv2d(x, self.w.unsqueeze(-1).unsqueeze(-1))
         log_det = x.shape[2] * x.shape[3] * torch.slogdet(self.w)[1]
         return y, log_det
@@ -287,9 +288,10 @@ class GLOW(nn.Module):
     def __init__(self, channels, depth, n_levels, additive=False):
         super(GLOW, self).__init__()
         self.levels = nn.ModuleList(
-                [GLOWLevel(channels*2**i, depth, additive) for i in range(n_levels-1)])
+                #[GLOWLevel(channels*2**i, depth, additive) for i in range(n_levels-1)])
+                [GLOWLevel(channels*2**i, depth, additive) for i in range(n_levels)])
         self.squeeze = Squeeze()
-        last_n_channels = channels*2**(n_levels-1)
+        last_n_channels = 4*(channels*2**(n_levels))
         self.steps = nn.ModuleList(
                 [GLOWStep(last_n_channels, additive) for _ in range(depth)])
 
@@ -312,6 +314,7 @@ class GLOW(nn.Module):
         # Squeeze
         x = self.squeeze(x)
         # GLOW Steps without split
+        # Extra steps after all levels
         for step in self.steps:
             x, log_det = step(x)
             log_det_sum += log_det
