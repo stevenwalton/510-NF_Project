@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -116,6 +117,7 @@ class AffineCouplingLayer(nn.Module):
         s, t = self.coupling(y2)
         x1 = (y1 - t)/s
         x2 = y2
+        log_det = - torch.log(s).sum([1,2,3])
         x = torch.cat((x1,x2), dim=1)
         return x, log_det
 
@@ -153,7 +155,7 @@ class InvertibleConvolution(nn.Module):
 
     def backward(self, y):
         w_inv = self.w.inverse()
-        x = F.conv2d(y, w_inv.squeeze(-1).unsqueeze(-1))
+        x = F.conv2d(y, w_inv.unsqueeze(-1).unsqueeze(-1))
         log_det = -y.shape[2] * y.shape[3] * torch.slogdet(self.w)[1]
         return x, log_det
 
@@ -169,7 +171,7 @@ class Squeeze(nn.Module):
         return x
 
     def backward(self, y):
-        _, C, H, W = y.shape()
+        _, C, H, W = y.shape
         y = y.reshape(-1, C//4, 2, 2, H, W)
         y = y.permute(0, 1, 4, 2, 5, 3)
         y = y.reshape(-1, C//4, 2*H, 2*W)
@@ -203,7 +205,8 @@ class Split(nn.Module):
     def backward(self, x1, z2):
         mu = self.mean(x1)
         l_std = self.log_std(x1)
-        x2 = z2 * torch.exp(l_std) - my
+        print(f"z2 {z2.shape}, x1 {x1.shape}, l_std {l_std.shape}")
+        x2 = z2 * torch.exp(l_std) - mu
         log_det = -l_std.sum([1,2,3])
         y = torch.cat((x1, x2), dim=1)
         return y, log_det
@@ -277,6 +280,7 @@ class GLOWLevel(nn.Module):
         return x1, z2, log_det_sum
 
     def backward(self, x1, z2):
+        print(f"GLOWLevel back x1 {x1.shape}, z2 {z2.shape}")
         y, log_det_sum = self.split.backward(x1,z2)
         for step in reversed(self.steps):
             y, log_det = step.backward(y)
@@ -333,9 +337,11 @@ class GLOW(nn.Module):
     def backward(self, z_list):
         log_det_sum = 0
         z = z_list[-1] # Get prior
+        print(f"z shape {np.shape(z)}")
 
         # Gaussians
-        mock_valsl = torch.zeros_like(z)
+        mock_vals = torch.zeros_like(z)
+        print(f"Mock vals backward {mock_vals.shape}")
         mu = self.mean(mock_vals)
         l_std = self.log_std(mock_vals)
 
@@ -351,7 +357,9 @@ class GLOW(nn.Module):
         x = self.squeeze.backward(x)
         # Levels in Reverse
         for i, level in enumerate(reversed(self.levels)):
-            z = z_list[-(2+i)]
+            #print(f"level: {i}")
+            #z = z_list[-(2+i)]
+            print(f"level: {i} x {x.shape} z {z.shape}")
             x, log_det = level.backward(x, z)
             log_det_sum ++ log_det
 

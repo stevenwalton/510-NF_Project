@@ -20,12 +20,15 @@ def train(dataset_name = 'celeb',
           #depth=24,
           depth=1,
           #n_levels=4,
-          n_levels=3,
+          n_levels=1,
           std=0.7,
           n_bits=4,
           download=True,
           num_workers=8,
+          n_samples=10,
+          stds=[0.75],
           ):
+    #stds = [0.,0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
     if "celeb" in dataset_name:
         print(f"Using CelebA Data Set")
         transform = transforms.Compose([
@@ -121,17 +124,21 @@ def train(dataset_name = 'celeb',
         print(f"Epoch: {epoch} finished with loss {loss}")
 
         if epoch % eval_freq == 0 or epoch == (nepochs-1):
-            with torch.zero_grad():
-                samp = sample(prior,
-                              n_samples=n_samples,
-                              n_levels=n_levels,
-                              init_channel=channels,
-                              init_hw=size,
-                              std=std)
-                xs, log_prob = model.backward(samp)
-                sample_imgs = torchvision.utils.make_grid(xs)
-                fig, ax = plt.subplots()
-                ax.imshow(sample_imgs)
+            with torch.no_grad():
+                #samp = utils.sample(prior,
+                #              n_samples=n_samples,
+                #              n_levels=n_levels,
+                #              init_channels=channels,
+                #              init_hw=size,
+                #              std=std)
+                #print(f"sample shape {samp.shape}")
+                #xs, log_prob = model.backward(samp)
+                #sample_imgs = torchvision.utils.make_grid(xs)
+                #fig, ax = plt.subplots()
+                #ax.imshow(sample_imgs)
+                images = utils.make_img(model, prior, n_samples, stds, n_levels,
+                        channels*2, 192)
+                plt.plot(losses[-eval_freq:])
                 ax.set_title("GLOW: Log Prob {log_prob:.4f}")
                 plt.savefig(f"GLOW_sample_epoch_{epoch}.png")
                 
