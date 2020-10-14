@@ -10,3 +10,7 @@ tags*
 *.bst
 *.bbl
 *.blg
+*.pth
+
+.python-version
+__*__

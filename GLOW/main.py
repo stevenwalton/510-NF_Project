@@ -3,7 +3,7 @@ sys.path.append('src')
 import train
 
 def main():
-    train.train(nepochs=10,
+    train.train(nepochs=200,
                 cuda=True)
 
 if __name__ == '__main__':

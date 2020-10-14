@@ -59,6 +59,8 @@ class ActNorm(nn.Module):
 
     def backward(self, y):
         ''' inverse of forward '''
+        if self.uninitialized:
+            self.initialize(y)
         x = (y - self.b) / self.s
         log_det = -y.shape[2] * y.shape[3] * torch.log(self.s.abs()).sum()
         return x, log_det
@@ -203,12 +205,13 @@ class Split(nn.Module):
         return x1, z2, log_det
 
     def backward(self, x1, z2):
+        #print(f"Input {x1.shape}, {z2.shape}")
         mu = self.mean(x1)
         l_std = self.log_std(x1)
-        print(f"z2 {z2.shape}, x1 {x1.shape}, l_std {l_std.shape}")
+        #print(f"z2 {z2.shape}, x1 {x1.shape}, l_std {l_std.shape}, mu {mu.shape}")
         x2 = z2 * torch.exp(l_std) - mu
         log_det = -l_std.sum([1,2,3])
-        y = torch.cat((x1, x2), dim=1)
+        y = torch.cat([x1, x2], dim=1)
         return y, log_det
 
 class GLOWStep(nn.Module):
@@ -245,12 +248,16 @@ class GLOWStep(nn.Module):
         # Affine
         x, log_det = self.affine.backward(y)
         log_det_sum += log_det
+        #print(f"Log det after affine {log_det_sum.shape}")
         # Invert 1x1
         x, log_det = self.invert_conv.backward(x)
         log_det_sum += log_det
+        #print(f"sum after invert {log_det_sum.shape}")
         # ActNorm
         x, log_det = self.actnorm.backward(x)
+        #print(f"Log_det after actnorm {log_det.shape}")
         log_det_sum += log_det
+        #print(f"End of step {log_det_sum.shape}")
 
         return x, log_det_sum
 
@@ -280,12 +287,13 @@ class GLOWLevel(nn.Module):
         return x1, z2, log_det_sum
 
     def backward(self, x1, z2):
-        print(f"GLOWLevel back x1 {x1.shape}, z2 {z2.shape}")
+        #print(f"GLOWLevel back x1 {x1.shape}, z2 {z2.shape}")
         y, log_det_sum = self.split.backward(x1,z2)
         for step in reversed(self.steps):
             y, log_det = step.backward(y)
             log_det_sum += log_det
         y = self.squeeze.backward(y)
+        #print(f"Level backward {log_det_sum.shape}")
         return y, log_det_sum
 
 class GLOW(nn.Module):
@@ -293,9 +301,9 @@ class GLOW(nn.Module):
         super(GLOW, self).__init__()
         self.levels = nn.ModuleList(
                 #[GLOWLevel(channels*2**i, depth, additive) for i in range(n_levels-1)])
-                [GLOWLevel(channels*2**i, depth, additive) for i in range(n_levels)])
+                [GLOWLevel(channels*2**i, depth, additive) for i in range(n_levels-1)])
         self.squeeze = Squeeze()
-        last_n_channels = 4*(channels*2**(n_levels))
+        last_n_channels = 4*(channels*2**(n_levels-1))
         self.steps = nn.ModuleList(
                 [GLOWStep(last_n_channels, additive) for _ in range(depth)])
 
@@ -311,15 +319,18 @@ class GLOW(nn.Module):
         z_list = []
         log_det_sum = 0
         # Through levels
-        for level in self.levels:
+        for i,level in enumerate(self.levels):
+            #print(f"Starting Level {i}")
             x, z, log_det = level(x)
             log_det_sum += log_det
             z_list.append(z)
         # Squeeze
+        #print(f"Squeezing")
         x = self.squeeze(x)
         # GLOW Steps without split
         # Extra steps after all levels
-        for step in self.steps:
+        for i,step in enumerate(self.steps):
+            #print(f"In step {i}")
             x, log_det = step(x)
             log_det_sum += log_det
         # As Gaussians on last z variables
@@ -335,32 +346,52 @@ class GLOW(nn.Module):
         return z_list, log_det_sum
 
     def backward(self, z_list):
-        log_det_sum = 0
+        #print(f"{10*'='}")
+        #print(f"Backwards")
+        #print(f"{10*'='}")
         z = z_list[-1] # Get prior
-        print(f"z shape {np.shape(z)}")
+        #print(f"Got z {z.shape}")
 
         # Gaussians
         mock_vals = torch.zeros_like(z)
-        print(f"Mock vals backward {mock_vals.shape}")
+        #print(f"Got mock vals {mock_vals.shape}")
         mu = self.mean(mock_vals)
+        #print("Got mu")
         l_std = self.log_std(mock_vals)
+        #print("Got l_std")
 
+        log_det_sum = 0.
+
+        #print(f"in back z {z.shape}, l_std {l_std.shape}, mu {mu.shape}")
         x = z * torch.exp(l_std) + mu
+        #print(f"Then x becomes {x.shape}")
         log_det = l_std.sum()
-        log_det_sum += log_det
+        #print(f"log_det = {log_det}")
+        log_det_sum = log_det_sum + log_det
+        #print(f"After gaussians {log_det_sum}")
 
         # Last steps
         for step in reversed(self.steps):
-            x, logdet = step.backward(x)
-            log_det_sum += log_det
+            x, log_det = step.backward(x)
+            log_det_sum = log_det_sum + log_det
+        #print(f"Before levels {log_det_sum}")
         # Last Squeeze
+        #print(f"x before squeeze {x.shape}")
         x = self.squeeze.backward(x)
+        #print(f"x after squeeze {x.shape}")
         # Levels in Reverse
+        #print("Number of levels")
+        #print(np.shape(self.levels))
         for i, level in enumerate(reversed(self.levels)):
             #print(f"level: {i}")
-            #z = z_list[-(2+i)]
-            print(f"level: {i} x {x.shape} z {z.shape}")
+            z = z_list[-(2+i)]
+            #z = z_list[-i]
+            #print(f"{10*'='}")
+            #print(f"Level {i} x {x.shape} z {z.shape}")
+            #print(f"{10*'='}")
             x, log_det = level.backward(x, z)
-            log_det_sum ++ log_det
+            #print(f"GLOW log_det_sum {log_det_sum.shape}, log_det {log_det.shape}")
+            log_det_sum = log_det_sum + log_det
 
+        #print(f"===\nDone\n===")
         return x, log_det_sum

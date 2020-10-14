@@ -5,6 +5,7 @@ from torch import optim
 from torch.distributions import Normal
 import torchvision
 from torchvision import transforms
+from matplotlib import pyplot as plt
 
 from model import GLOW
 import utils
@@ -13,22 +14,21 @@ def train(dataset_name = 'celeb',
           nepochs=1,
           eval_freq=10,
           lr=1e-4,
-          batch_size=20,
+          batch_size=1,
           cuda=False,
           channels=3,
           size=32,
-          #depth=24,
-          depth=1,
-          #n_levels=4,
-          n_levels=1,
-          std=0.7,
+          depth=24,
+          n_levels=4,
           n_bits=4,
           download=True,
-          num_workers=8,
-          n_samples=10,
-          stds=[0.75],
+          num_workers=24,
+          n_samples=9,
+          stds = [0.,0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
           ):
-    #stds = [0.,0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+    batch_size=10
+    #size=224
+    assert(n_levels > 1),f"Must have more than 1 level, even for testing"
     if "celeb" in dataset_name:
         print(f"Using CelebA Data Set")
         transform = transforms.Compose([
@@ -61,6 +61,7 @@ def train(dataset_name = 'celeb',
                    'truck')
     elif "cifar" in dataset_name:
         print(f"Using CIFAR10 Data Set")
+        exit(1)
         transform = transforms.Compose([transforms.CenterCrop(192),  #
                                                transforms.Resize(64),
              transforms.Lambda(lambda im: np.array(im, dtype=np.float32)),
@@ -95,7 +96,9 @@ def train(dataset_name = 'celeb',
         model = GLOW(channels=channels,
                      depth=depth,
                      n_levels=n_levels)
-    optimizer = optim.AdamW(model.parameters(), lr=lr)
+    # Paper uses SGD
+    optimizer = optim.SGD(model.parameters(), lr=lr)
+    #optimizer = optim.Adam(model.parameters(), lr=lr)
     gaussian = Normal(torch.zeros(1).to(device), torch.ones(1).to(device))
 
     prior = gaussian
@@ -104,6 +107,8 @@ def train(dataset_name = 'celeb',
     for epoch in range(nepochs):
         running_loss = 0
         for i, (imgs, _) in enumerate(trainloader):
+            if i % 100 is 0:
+                print(f"Batch {i}/{len(trainset)/batch_size}")
             optimizer.zero_grad()
             zs, log_det = model(imgs.to(device))
             # Fix to torch.sum
@@ -123,22 +128,39 @@ def train(dataset_name = 'celeb',
         epoch_loss_array[epoch] = loss.item()
         print(f"Epoch: {epoch} finished with loss {loss}")
 
-        if epoch % eval_freq == 0 or epoch == (nepochs-1):
+        if epoch % eval_freq == 0 or epoch == (nepochs-1) and epoch is not 0:
+            torch.save(model.state_dict(), f"checkpoint_{epoch}.pth")
+            #model.load_state_dict(torch.load("checkpoint.pth"), strict=False)
             with torch.no_grad():
-                #samp = utils.sample(prior,
-                #              n_samples=n_samples,
-                #              n_levels=n_levels,
-                #              init_channels=channels,
-                #              init_hw=size,
-                #              std=std)
-                #print(f"sample shape {samp.shape}")
-                #xs, log_prob = model.backward(samp)
-                #sample_imgs = torchvision.utils.make_grid(xs)
-                #fig, ax = plt.subplots()
-                #ax.imshow(sample_imgs)
-                images = utils.make_img(model, prior, n_samples, stds, n_levels,
-                        channels*2, 192)
-                plt.plot(losses[-eval_freq:])
-                ax.set_title("GLOW: Log Prob {log_prob:.4f}")
-                plt.savefig(f"GLOW_sample_epoch_{epoch}.png")
-                
+                samp = utils.sample(prior,
+                              n_samples=n_samples,
+                              n_levels=n_levels,
+                              init_channels=channels,
+                              init_hw=64,#size,
+                              std=stds)
+                gen_imgs = utils.make_img(model, prior, n_samples, stds,
+                        n_levels, channels, 128)
+                samp_imgs = torchvision.utils.make_grid(gen_imgs, n_samples).cpu()
+                npimg = samp_imgs.numpy()
+                npimg = np.transpose(npimg,(1,2,0))
+                plt.figure(figsize = (14,12))
+                plt.imshow(npimg, interpolation='nearest')
+                plt.savefig(f"Epoch_{i}_images.png")
+                print(f"Saved Epoch_{i}_images.png")
+    #torch.save(model.state_dict(), "checkpoint.pth")
+    #model.load_state_dict(torch.load("checkpoint.pth"), strict=False)
+    with torch.no_grad():
+        samp = utils.sample(prior,
+                      n_samples=n_samples,
+                      n_levels=n_levels,
+                      init_channels=channels,
+                      init_hw=64,#size,
+                      std=stds)
+        gen_imgs = utils.make_img(model, prior, n_samples, stds,
+                n_levels, channels, 128)
+        samp_imgs = torchvision.utils.make_grid(gen_imgs, n_samples).cpu()
+        npimg = samp_imgs.numpy()
+        npimg = np.transpose(npimg,(1,2,0))
+        plt.figure(figsize = (14,12))
+        plt.imshow(npimg, interpolation='nearest')
+        plt.savefig("FinalOutput.png")

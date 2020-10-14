@@ -38,7 +38,7 @@ def make_img(model,
         for z in z_stds:
             h = sample(prior, n_samples, n_levels, init_channels=c, init_hw=hw, 
                        std=z)
-            print(f"h size {np.shape(h)}")
+            #print(f"h size {np.shape(h)}")
             s, _ = model.backward(h)
             zs, log_det = model(s)
             prior_logprob = sum(prior.log_prob(zz).sum([1,2,3]) for zz in zs)
