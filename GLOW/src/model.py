@@ -3,6 +3,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from torch.utils.checkpoint import checkpoint
+
 '''
 [ ] Write functions
     - [x] ActNorm
@@ -49,6 +51,7 @@ class ActNorm(nn.Module):
         self.register_parameter('s', nn.Parameter(stds))
         self.uninitialized = False
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         if self.uninitialized:
             self.initialize(x)
@@ -57,6 +60,7 @@ class ActNorm(nn.Module):
         log_det = x.shape[2] * x.shape[3] * torch.log(self.s.abs()).sum()
         return y, log_det
 
+    @torch.cuda.amp.autocast()
     def backward(self, y):
         ''' inverse of forward '''
         if self.uninitialized:
@@ -83,6 +87,7 @@ class CouplingFunction(nn.Module):
         self.conv_layer3.weight.data.zero_()
         self.conv_layer3.bias.data.zero_()
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         z = self.conv_layer3(torch.relu(
                              self.actn2( self.conv_layer2( torch.relu(
@@ -104,6 +109,7 @@ class AffineCouplingLayer(nn.Module):
         super(AffineCouplingLayer, self).__init__()
         self.coupling = CouplingFunction(channels)
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         x1, x2 = x.chunk(2,1)
         s, t = self.coupling(x2)
@@ -114,6 +120,7 @@ class AffineCouplingLayer(nn.Module):
         y = torch.cat((y1, y2), dim=1)
         return y, log_det
 
+    @torch.cuda.amp.autocast()
     def backward(self, y):
         y1, y2 = y.chunk(2,1)
         s, t = self.coupling(y2)
@@ -133,6 +140,7 @@ class AdditiveCouplingLayer(nn.Module):
         super(AdditiveCouplingLayer, self).__init()
         self.coupling = CouplingFunction(channels)
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         x1, x2 = x.chunk(2,1)
         s, t = self.coupling(x2)
@@ -149,22 +157,30 @@ class InvertibleConvolution(nn.Module):
         self.w = nn.Parameter(torch.nn.init.orthogonal_(
                                             torch.randn(channels, channels)))
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         b, a, c, d = x.shape
         y = F.conv2d(x, self.w.unsqueeze(-1).unsqueeze(-1))
         log_det = x.shape[2] * x.shape[3] * torch.slogdet(self.w)[1]
         return y, log_det
 
+    @torch.cuda.amp.autocast()
     def backward(self, y):
         w_inv = self.w.inverse()
         x = F.conv2d(y, w_inv.unsqueeze(-1).unsqueeze(-1))
-        log_det = -y.shape[2] * y.shape[3] * torch.slogdet(self.w)[1]
+        #log_det = -y.shape[2] * y.shape[3] * torch.slogdet(self.w)[1]
+        LU, pivots = torch.lu(self.w)
+        P, L, U = torch.lu_unpack(LU, pivots)
+        #s = torch.sum(torch.log(torch.abs(torch.prod(torch.diagonal(U)))))
+        s = torch.sum(torch.log(torch.abs(torch.diagonal(U))))
+        log_det = -y,shape[2] * y.shape[3] * s
         return x, log_det
 
 class Squeeze(nn.Module):
     def __init__(self):
         super(Squeeze, self).__init__()
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         _, C, H, W = x.shape
         x = x.reshape(-1, C, H//2, 2, W//2, 2)
@@ -172,6 +188,7 @@ class Squeeze(nn.Module):
         x = x.reshape(-1, 4*C, H//2, W//2)
         return x
 
+    @torch.cuda.amp.autocast()
     def backward(self, y):
         _, C, H, W = y.shape
         y = y.reshape(-1, C//4, 2, 2, H, W)
@@ -196,6 +213,7 @@ class Split(nn.Module):
         self.log_std.weight.data.zero_()
         self.log_std.bias.data.zero_()
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         x1, x2 = x.chunk(2, dim=1)
         mu = self.mean(x1)
@@ -204,11 +222,10 @@ class Split(nn.Module):
         log_det = -l_std.sum([1,2,3])
         return x1, z2, log_det
 
+    @torch.cuda.amp.autocast()
     def backward(self, x1, z2):
-        #print(f"Input {x1.shape}, {z2.shape}")
         mu = self.mean(x1)
         l_std = self.log_std(x1)
-        #print(f"z2 {z2.shape}, x1 {x1.shape}, l_std {l_std.shape}, mu {mu.shape}")
         x2 = z2 * torch.exp(l_std) - mu
         log_det = -l_std.sum([1,2,3])
         y = torch.cat([x1, x2], dim=1)
@@ -229,6 +246,7 @@ class GLOWStep(nn.Module):
         else:
             self.affine = AffineCouplingLayer(channels)
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         log_det_sum = 0.
         # ActNorm
@@ -243,21 +261,18 @@ class GLOWStep(nn.Module):
 
         return y, log_det_sum
 
+    @torch.cuda.amp.autocast()
     def backward(self, y):
         log_det_sum = 0
         # Affine
         x, log_det = self.affine.backward(y)
         log_det_sum += log_det
-        #print(f"Log det after affine {log_det_sum.shape}")
         # Invert 1x1
         x, log_det = self.invert_conv.backward(x)
         log_det_sum += log_det
-        #print(f"sum after invert {log_det_sum.shape}")
         # ActNorm
         x, log_det = self.actnorm.backward(x)
-        #print(f"Log_det after actnorm {log_det.shape}")
         log_det_sum += log_det
-        #print(f"End of step {log_det_sum.shape}")
 
         return x, log_det_sum
 
@@ -274,6 +289,7 @@ class GLOWLevel(nn.Module):
                 [GLOWStep(4*channels, additive) for _ in range(depth)])
         self.split = Split(4*channels)
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         x = self.squeeze(x)
         log_det_sum = 0
@@ -286,14 +302,13 @@ class GLOWLevel(nn.Module):
         log_det_sum += log_det
         return x1, z2, log_det_sum
 
+    @torch.cuda.amp.autocast()
     def backward(self, x1, z2):
-        #print(f"GLOWLevel back x1 {x1.shape}, z2 {z2.shape}")
         y, log_det_sum = self.split.backward(x1,z2)
         for step in reversed(self.steps):
             y, log_det = step.backward(y)
             log_det_sum += log_det
         y = self.squeeze.backward(y)
-        #print(f"Level backward {log_det_sum.shape}")
         return y, log_det_sum
 
 class GLOW(nn.Module):
@@ -315,22 +330,22 @@ class GLOW(nn.Module):
         self.log_std.weight.data.zero_()
         self.log_std.bias.data.zero_()
 
+    @torch.cuda.amp.autocast()
     def forward(self, x):
         z_list = []
         log_det_sum = 0
         # Through levels
+        x.requires_grad=True
         for i,level in enumerate(self.levels):
-            #print(f"Starting Level {i}")
-            x, z, log_det = level(x)
+            #x, z, log_det = level(x)
+            x, z, log_det = checkpoint(level, x)
             log_det_sum += log_det
             z_list.append(z)
         # Squeeze
-        #print(f"Squeezing")
         x = self.squeeze(x)
         # GLOW Steps without split
         # Extra steps after all levels
         for i,step in enumerate(self.steps):
-            #print(f"In step {i}")
             x, log_det = step(x)
             log_det_sum += log_det
         # As Gaussians on last z variables
@@ -345,53 +360,34 @@ class GLOW(nn.Module):
         z_list.append(z)
         return z_list, log_det_sum
 
+    @torch.cuda.amp.autocast()
     def backward(self, z_list):
-        #print(f"{10*'='}")
-        #print(f"Backwards")
-        #print(f"{10*'='}")
         z = z_list[-1] # Get prior
-        #print(f"Got z {z.shape}")
 
         # Gaussians
         mock_vals = torch.zeros_like(z)
-        #print(f"Got mock vals {mock_vals.shape}")
         mu = self.mean(mock_vals)
-        #print("Got mu")
         l_std = self.log_std(mock_vals)
-        #print("Got l_std")
 
         log_det_sum = 0.
 
-        #print(f"in back z {z.shape}, l_std {l_std.shape}, mu {mu.shape}")
         x = z * torch.exp(l_std) + mu
-        #print(f"Then x becomes {x.shape}")
         log_det = l_std.sum()
-        #print(f"log_det = {log_det}")
         log_det_sum = log_det_sum + log_det
-        #print(f"After gaussians {log_det_sum}")
 
         # Last steps
-        for step in reversed(self.steps):
-            x, log_det = step.backward(x)
+        for i, step in enumberate(reversed(self.steps)):
+            #x, log_det = step.backward(x)
+            x, log_det = checkpoint(step.backward, x)
+            if i is 0:
+                x.requires_grad=True
             log_det_sum = log_det_sum + log_det
-        #print(f"Before levels {log_det_sum}")
         # Last Squeeze
-        #print(f"x before squeeze {x.shape}")
         x = self.squeeze.backward(x)
-        #print(f"x after squeeze {x.shape}")
         # Levels in Reverse
-        #print("Number of levels")
-        #print(np.shape(self.levels))
         for i, level in enumerate(reversed(self.levels)):
-            #print(f"level: {i}")
             z = z_list[-(2+i)]
-            #z = z_list[-i]
-            #print(f"{10*'='}")
-            #print(f"Level {i} x {x.shape} z {z.shape}")
-            #print(f"{10*'='}")
             x, log_det = level.backward(x, z)
-            #print(f"GLOW log_det_sum {log_det_sum.shape}, log_det {log_det.shape}")
             log_det_sum = log_det_sum + log_det
 
-        #print(f"===\nDone\n===")
         return x, log_det_sum

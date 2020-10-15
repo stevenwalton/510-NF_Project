@@ -13,27 +13,29 @@ import utils
 def train(dataset_name = 'celeb',
           nepochs=1,
           eval_freq=10,
-          lr=1e-4,
+          lr=0.001,
           batch_size=1,
           cuda=False,
           channels=3,
-          size=32,
-          depth=24,
-          n_levels=4,
-          n_bits=4,
+          size=256,
+          depth=32,
+          n_levels=6,
+          n_bits=5,
           download=True,
-          num_workers=24,
+          num_workers=8,
           n_samples=9,
-          stds = [0.,0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+          #stds = [0.,0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
+          stds=[0.75],
           ):
-    batch_size=10
+    batch_size=1
     #size=224
     assert(n_levels > 1),f"Must have more than 1 level, even for testing"
     if "celeb" in dataset_name:
         print(f"Using CelebA Data Set")
         transform = transforms.Compose([
-            transforms.CenterCrop(192),
-            transforms.Resize(64),
+            transforms.CenterCrop(size),
+            #transforms.Resize(64),
+            #transforms.Resize(size),
             transforms.Lambda(lambda im: np.array(im, dtype=np.float32)),
             transforms.Lambda(lambda x: np.floor(x / 2**(8 - n_bits)) / 2**n_bits), #bit reduction
             transforms.ToTensor(),
@@ -77,6 +79,7 @@ def train(dataset_name = 'celeb',
         trainloader = torch.utils.data.DataLoader(trainset, 
                                                   batch_size=batch_size, 
                                                   shuffle=True, 
+                                                  pin_memory=True,
                                                   num_workers=num_workers)
     else:
         print(f"Don't know dataset {dataset_name}")
@@ -104,13 +107,17 @@ def train(dataset_name = 'celeb',
     prior = gaussian
     model.train()
     epoch_loss_array = torch.zeros(nepochs)
+    # AMP
+    scaler = torch.cuda.amp.GradScaler()
     for epoch in range(nepochs):
         running_loss = 0
         for i, (imgs, _) in enumerate(trainloader):
             if i % 100 is 0:
                 print(f"Batch {i}/{len(trainset)/batch_size}")
+                torch.cuda.empty_cache()
             optimizer.zero_grad()
-            zs, log_det = model(imgs.to(device))
+            with torch.cuda.amp.autocast():
+                zs, log_det = model(imgs.to(device))
             # Fix to torch.sum
             prior_logprob = sum(prior.log_prob(z).sum([1,2,3]) for z in zs)
             log_prob = prior_logprob + log_det
@@ -118,17 +125,21 @@ def train(dataset_name = 'celeb',
             # Bits per pixel
             log_prob /= (np.log(2) * channels * size * size)
             loss = -log_prob.mean()
-            if loss == float('inf'):
-                print(f"Something went wrong! Loss is {loss}")
+            if loss.item() == float('inf'):
+                print(f"Something went wrong! Loss is {loss.item()}")
                 exit(1)
-            running_loss -= loss
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), 50) # Why this
-            optimizer.step()
-        epoch_loss_array[epoch] = loss.item()
-        print(f"Epoch: {epoch} finished with loss {loss}")
+            running_loss -= loss.detach().cpu().item()
+            #loss.backward()
+            scaler.scale(loss).backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 50) # 50th norm
+            #optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
+        epoch_loss_array[epoch] = loss.detach().cpu().item()
+        torch.cuda.empty_cache()
+        print(f"Epoch: {epoch}/{nepochs} finished with loss {loss}")
 
-        if epoch % eval_freq == 0 or epoch == (nepochs-1) and epoch is not 0:
+        if epoch is not 0 and (epoch % eval_freq == 0 or epoch == (nepochs-1)):
             torch.save(model.state_dict(), f"checkpoint_{epoch}.pth")
             #model.load_state_dict(torch.load("checkpoint.pth"), strict=False)
             with torch.no_grad():
@@ -136,7 +147,7 @@ def train(dataset_name = 'celeb',
                               n_samples=n_samples,
                               n_levels=n_levels,
                               init_channels=channels,
-                              init_hw=64,#size,
+                              init_hw=size,
                               std=stds)
                 gen_imgs = utils.make_img(model, prior, n_samples, stds,
                         n_levels, channels, 128)
@@ -145,16 +156,16 @@ def train(dataset_name = 'celeb',
                 npimg = np.transpose(npimg,(1,2,0))
                 plt.figure(figsize = (14,12))
                 plt.imshow(npimg, interpolation='nearest')
-                plt.savefig(f"Epoch_{i}_images.png")
-                print(f"Saved Epoch_{i}_images.png")
-    #torch.save(model.state_dict(), "checkpoint.pth")
-    #model.load_state_dict(torch.load("checkpoint.pth"), strict=False)
+                plt.savefig(f"Epoch_{epoch}_images.png")
+                print(f"Saved Epoch_{epoch}_images.png")
+    #model.load_state_dict(torch.load("checkpoint_0.pth"), strict=False)
+    torch.save(model.state_dict(), "FinalModel.pth")
     with torch.no_grad():
         samp = utils.sample(prior,
                       n_samples=n_samples,
                       n_levels=n_levels,
                       init_channels=channels,
-                      init_hw=64,#size,
+                      init_hw=size,
                       std=stds)
         gen_imgs = utils.make_img(model, prior, n_samples, stds,
                 n_levels, channels, 128)
