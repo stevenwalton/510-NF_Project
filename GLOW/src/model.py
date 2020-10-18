@@ -5,32 +5,6 @@ from torch.nn import functional as F
 
 from torch.utils.checkpoint import checkpoint
 
-'''
-[ ] Write functions
-    - [x] ActNorm
-    - [x] Coupling Function
-    - [x] Affine Coupling Layer
-    - [x] Additive Coupling Layer
-    - [x] Invertible Convolution
-    - [ ] Squeeze
-    - [ ] Split
-    - [ ] GLOW Step
-    - [ ] GLOW Level
-    - [ ] GLOW
-[ ] Document
-    - [ ] ActNorm
-    - [ ] Coupling Function
-    - [ ] Affine Coupling Layer
-    - [ ] Additive Coupling Layer
-    - [ ] Invertible Convolution
-    - [ ] Squeeze
-    - [ ] Split
-    - [ ] GLOW Step
-    - [ ] GLOW Level
-    - [ ] GLOW
-[ ] LU Decomp in Invert Conv
-'''
-
 class ActNorm(nn.Module):
     def __init__(self, channels):
         super(ActNorm, self).__init__()
@@ -173,7 +147,7 @@ class InvertibleConvolution(nn.Module):
         P, L, U = torch.lu_unpack(LU, pivots)
         #s = torch.sum(torch.log(torch.abs(torch.prod(torch.diagonal(U)))))
         s = torch.sum(torch.log(torch.abs(torch.diagonal(U))))
-        log_det = -y,shape[2] * y.shape[3] * s
+        log_det = -y.shape[2] * y.shape[3] * s
         return x, log_det
 
 class Squeeze(nn.Module):
@@ -335,10 +309,10 @@ class GLOW(nn.Module):
         z_list = []
         log_det_sum = 0
         # Through levels
-        x.requires_grad=True
+        #x.requires_grad=True
         for i,level in enumerate(self.levels):
-            #x, z, log_det = level(x)
-            x, z, log_det = checkpoint(level, x)
+            x, z, log_det = level(x)
+            #x, z, log_det = checkpoint(level, x)
             log_det_sum += log_det
             z_list.append(z)
         # Squeeze
@@ -362,6 +336,7 @@ class GLOW(nn.Module):
 
     @torch.cuda.amp.autocast()
     def backward(self, z_list):
+        print("Backwards pass")
         z = z_list[-1] # Get prior
 
         # Gaussians
@@ -372,15 +347,14 @@ class GLOW(nn.Module):
         log_det_sum = 0.
 
         x = z * torch.exp(l_std) + mu
+        #x.requires_grad=True
         log_det = l_std.sum()
         log_det_sum = log_det_sum + log_det
 
         # Last steps
-        for i, step in enumberate(reversed(self.steps)):
-            #x, log_det = step.backward(x)
-            x, log_det = checkpoint(step.backward, x)
-            if i is 0:
-                x.requires_grad=True
+        for i, step in enumerate(reversed(self.steps)):
+            x, log_det = step.backward(x)
+            #x, log_det = checkpoint(step.backward, x)
             log_det_sum = log_det_sum + log_det
         # Last Squeeze
         x = self.squeeze.backward(x)

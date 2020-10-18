@@ -8,11 +8,11 @@ from torchvision import transforms
 from matplotlib import pyplot as plt
 
 from model import GLOW
-import utils
+import other
 
 def train(dataset_name = 'celeb',
           nepochs=1,
-          eval_freq=10,
+          eval_freq=1,
           lr=0.001,
           batch_size=1,
           cuda=False,
@@ -27,15 +27,17 @@ def train(dataset_name = 'celeb',
           #stds = [0.,0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9]
           stds=[0.75],
           ):
-    batch_size=1
+    #batch_size=10
+    #n_levels=4
+    #depth=32
+    size=64
     #size=224
     assert(n_levels > 1),f"Must have more than 1 level, even for testing"
     if "celeb" in dataset_name:
         print(f"Using CelebA Data Set")
         transform = transforms.Compose([
-            transforms.CenterCrop(size),
-            #transforms.Resize(64),
-            #transforms.Resize(size),
+            transforms.CenterCrop(192),
+            transforms.Resize(size),
             transforms.Lambda(lambda im: np.array(im, dtype=np.float32)),
             transforms.Lambda(lambda x: np.floor(x / 2**(8 - n_bits)) / 2**n_bits), #bit reduction
             transforms.ToTensor(),
@@ -112,7 +114,7 @@ def train(dataset_name = 'celeb',
     for epoch in range(nepochs):
         running_loss = 0
         for i, (imgs, _) in enumerate(trainloader):
-            if i % 100 is 0:
+            if i % 1000 is 0:
                 print(f"Batch {i}/{len(trainset)/batch_size}")
                 torch.cuda.empty_cache()
             optimizer.zero_grad()
@@ -139,17 +141,17 @@ def train(dataset_name = 'celeb',
         torch.cuda.empty_cache()
         print(f"Epoch: {epoch}/{nepochs} finished with loss {loss}")
 
-        if epoch is not 0 and (epoch % eval_freq == 0 or epoch == (nepochs-1)):
+        if (epoch % eval_freq == 0 or epoch == (nepochs-1)):
             torch.save(model.state_dict(), f"checkpoint_{epoch}.pth")
             #model.load_state_dict(torch.load("checkpoint.pth"), strict=False)
             with torch.no_grad():
-                samp = utils.sample(prior,
+                samp = other.sample(prior,
                               n_samples=n_samples,
                               n_levels=n_levels,
                               init_channels=channels,
                               init_hw=size,
                               std=stds)
-                gen_imgs = utils.make_img(model, prior, n_samples, stds,
+                gen_imgs = other.make_img(model, prior, n_samples, stds,
                         n_levels, channels, 128)
                 samp_imgs = torchvision.utils.make_grid(gen_imgs, n_samples).cpu()
                 npimg = samp_imgs.numpy()
@@ -158,18 +160,18 @@ def train(dataset_name = 'celeb',
                 plt.imshow(npimg, interpolation='nearest')
                 plt.savefig(f"Epoch_{epoch}_images.png")
                 print(f"Saved Epoch_{epoch}_images.png")
-    #model.load_state_dict(torch.load("checkpoint_0.pth"), strict=False)
+    #model.load_state_dict(torch.load("checkpoint_10.pth"), strict=False)
     torch.save(model.state_dict(), "FinalModel.pth")
     with torch.no_grad():
-        samp = utils.sample(prior,
+        samp = other.sample(prior,
                       n_samples=n_samples,
                       n_levels=n_levels,
                       init_channels=channels,
                       init_hw=size,
                       std=stds)
-        gen_imgs = utils.make_img(model, prior, n_samples, stds,
+        gen_imgs = other.make_img(model, prior, n_samples, stds,
                 n_levels, channels, 128)
-        samp_imgs = torchvision.utils.make_grid(gen_imgs, n_samples).cpu()
+        samp_imgs = torchvision.utils.make_grid(gen_imgs, int(np.sqrt(n_samples))).cpu()
         npimg = samp_imgs.numpy()
         npimg = np.transpose(npimg,(1,2,0))
         plt.figure(figsize = (14,12))
