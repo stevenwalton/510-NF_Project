@@ -14,16 +14,16 @@ def sample(prior,
     init_channels *= 2
     init_hw = init_hw // 2
     for i in range(n_levels):
-        z = std * prior.sample([n_samples,
+        z = std * prior.sample((n_samples,
                                 init_channels * 2**i,
                                 init_hw // 2**i,
-                                init_hw // 2**i]).squeeze().cpu().numpy()
-        samples.append(torch.from_numpy(z).cuda())
-    z = std * prior.sample([n_samples,
+                                init_hw // 2**i)).squeeze().cpu().numpy()
+        samples.append(torch.from_numpy(z).float().cuda())
+    z = std * prior.sample((n_samples,
                             (init_channels * 2**n_levels)*2,
                             init_hw // 2**n_levels,
-                            init_hw // 2**n_levels]).squeeze().cpu().numpy()
-    samples.append(torch.from_numpy(z).cuda())
+                            init_hw // 2**n_levels)).squeeze().cpu().numpy()
+    samples.append(torch.from_numpy(z).float().cuda())
     return samples
 
 def make_img(model,
@@ -39,7 +39,7 @@ def make_img(model,
             h = sample(prior, n_samples, n_levels, init_channels=c, init_hw=hw, 
                        std=z)
             #print(f"h size {np.shape(h)}")
-            s, _ = model.backward(h)
+            s, _ = model.module.backward(h)
             zs, log_det = model(s)
             prior_logprob = sum(prior.log_prob(zz).sum([1,2,3]) for zz in zs)
             log_prob = prior_logprob + log_det

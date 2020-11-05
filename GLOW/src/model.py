@@ -3,42 +3,56 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from torch.utils.checkpoint import checkpoint
+#from torch.utils.checkpoint import checkpoint
 
 class ActNorm(nn.Module):
     def __init__(self, channels):
         super(ActNorm, self).__init__()
         self.uninitialized = True
+        self.s = nn.Parameter(torch.ones(1,channels,1,1))
+        self.b = nn.Parameter(torch.zeros(1,channels,1,1))
 
-    def initialize(self, x):
-        '''
-        Write more here
-        '''
-        per_channel = x.transpose(0,1).flatten(1)
-        channels = per_channel.shape[0]
-        means = -per_channel.mean(1)
-        stds = 1/(per_channel.std(1) + 1e-6)
-        means = means.view(1, channels, 1, 1)
-        stds = stds.view(1, channels, 1, 1)
-        
-        self.register_parameter('b', nn.Parameter(means))
-        self.register_parameter('s', nn.Parameter(stds))
-        self.uninitialized = False
+    #def initialize(self, x):
+    #    '''
+    #    Write more here
+    #    '''
+    #    per_channel = x.transpose(0,1).flatten(1)
+    #    channels = per_channel.shape[0]
+    #    means = -per_channel.mean(1)
+    #    stds = 1/(per_channel.std(1) + 1e-6)
+    #    means = means.view(1, channels, 1, 1)
+    #    stds = stds.view(1, channels, 1, 1)
+    #    
+    #    self.register_parameter('b', nn.Parameter(means))
+    #    self.register_parameter('s', nn.Parameter(stds))
+    #    self.uninitialized = False
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         if self.uninitialized:
-            self.initialize(x)
+            #self.initialize(x)
+            per_channel = x.transpose(0,1).flatten(1)
+            channels = per_channel.shape[0]
+            means = -per_channel.mean(1)
+            stds = 1/(per_channel.std(1) + 1e-6)
+
+            means = means.view(1, channels, 1, 1)
+            stds = stds.view(1, channels, 1, 1)
+
+            self.b.data.copy_(means)
+            self.s.data.copy_(stds)
+            self.uninitialized = False 
+
 
         y = x*self.s + self.b
         log_det = x.shape[2] * x.shape[3] * torch.log(self.s.abs()).sum()
         return y, log_det
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, y):
         ''' inverse of forward '''
-        if self.uninitialized:
-            self.initialize(y)
+        #if self.uninitialized:
+        #    self.initialize(y)
         x = (y - self.b) / self.s
         log_det = -y.shape[2] * y.shape[3] * torch.log(self.s.abs()).sum()
         return x, log_det
@@ -61,7 +75,7 @@ class CouplingFunction(nn.Module):
         self.conv_layer3.weight.data.zero_()
         self.conv_layer3.bias.data.zero_()
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         z = self.conv_layer3(torch.relu(
                              self.actn2( self.conv_layer2( torch.relu(
@@ -83,7 +97,7 @@ class AffineCouplingLayer(nn.Module):
         super(AffineCouplingLayer, self).__init__()
         self.coupling = CouplingFunction(channels)
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         x1, x2 = x.chunk(2,1)
         s, t = self.coupling(x2)
@@ -94,7 +108,7 @@ class AffineCouplingLayer(nn.Module):
         y = torch.cat((y1, y2), dim=1)
         return y, log_det
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, y):
         y1, y2 = y.chunk(2,1)
         s, t = self.coupling(y2)
@@ -114,7 +128,7 @@ class AdditiveCouplingLayer(nn.Module):
         super(AdditiveCouplingLayer, self).__init()
         self.coupling = CouplingFunction(channels)
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         x1, x2 = x.chunk(2,1)
         s, t = self.coupling(x2)
@@ -125,28 +139,42 @@ class AdditiveCouplingLayer(nn.Module):
         y = torch.cat((y1,y2),dim=1)
         return y, log_det
 
+    def backward(self, y):
+        y1, y2 = y.chunk(2,1)
+        #s, t = y.chunk(2,1)
+        s,t = self.coupling(y2)
+        x1 = y1 - t
+        x2 = y2
+        log_det = torch.zeros(y.shape[0])
+        y = torch.cat((x1,x2), dim=1)
+        return y, log_det
+
 class InvertibleConvolution(nn.Module):
     def __init__(self, channels):
         super(InvertibleConvolution, self).__init__()
         self.w = nn.Parameter(torch.nn.init.orthogonal_(
                                             torch.randn(channels, channels)))
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
-        b, a, c, d = x.shape
+        #b, a, c, d = x.shape
         y = F.conv2d(x, self.w.unsqueeze(-1).unsqueeze(-1))
         log_det = x.shape[2] * x.shape[3] * torch.slogdet(self.w)[1]
         return y, log_det
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, y):
         w_inv = self.w.inverse()
-        x = F.conv2d(y, w_inv.unsqueeze(-1).unsqueeze(-1))
-        #log_det = -y.shape[2] * y.shape[3] * torch.slogdet(self.w)[1]
-        LU, pivots = torch.lu(self.w)
-        P, L, U = torch.lu_unpack(LU, pivots)
+        # Direct way
         #s = torch.sum(torch.log(torch.abs(torch.prod(torch.diagonal(U)))))
-        s = torch.sum(torch.log(torch.abs(torch.diagonal(U))))
+        x = F.conv2d(y, w_inv.unsqueeze(-1).unsqueeze(-1))
+        s = torch.slogdet(self.w)[1]
+        #log_det = -y.shape[2] * y.shape[3] * torch.slogdet(self.w)[1]
+
+        # LU Decomp
+        #LU, pivots = torch.lu(self.w)
+        #P, L, U = torch.lu_unpack(LU, pivots)
+        #s = torch.sum(torch.log(torch.abs(torch.diagonal(U))))
         log_det = -y.shape[2] * y.shape[3] * s
         return x, log_det
 
@@ -154,7 +182,7 @@ class Squeeze(nn.Module):
     def __init__(self):
         super(Squeeze, self).__init__()
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         _, C, H, W = x.shape
         x = x.reshape(-1, C, H//2, 2, W//2, 2)
@@ -162,7 +190,7 @@ class Squeeze(nn.Module):
         x = x.reshape(-1, 4*C, H//2, W//2)
         return x
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, y):
         _, C, H, W = y.shape
         y = y.reshape(-1, C//4, 2, 2, H, W)
@@ -187,7 +215,7 @@ class Split(nn.Module):
         self.log_std.weight.data.zero_()
         self.log_std.bias.data.zero_()
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         x1, x2 = x.chunk(2, dim=1)
         mu = self.mean(x1)
@@ -196,7 +224,7 @@ class Split(nn.Module):
         log_det = -l_std.sum([1,2,3])
         return x1, z2, log_det
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, x1, z2):
         mu = self.mean(x1)
         l_std = self.log_std(x1)
@@ -220,7 +248,7 @@ class GLOWStep(nn.Module):
         else:
             self.affine = AffineCouplingLayer(channels)
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         log_det_sum = 0.
         # ActNorm
@@ -235,12 +263,12 @@ class GLOWStep(nn.Module):
 
         return y, log_det_sum
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, y):
         log_det_sum = 0
         # Affine
         x, log_det = self.affine.backward(y)
-        log_det_sum += log_det
+        log_det_sum = log_det_sum + log_det
         # Invert 1x1
         x, log_det = self.invert_conv.backward(x)
         log_det_sum += log_det
@@ -263,20 +291,20 @@ class GLOWLevel(nn.Module):
                 [GLOWStep(4*channels, additive) for _ in range(depth)])
         self.split = Split(4*channels)
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         x = self.squeeze(x)
-        log_det_sum = 0
+        log_det_sum = 0.
         # K Steps
         for step in self.steps:
             x, log_det = step(x)
-            log_det_sum += log_det
+            log_det_sum = log_det_sum + log_det
         # Split
         x1, z2, log_det  = self.split(x)
         log_det_sum += log_det
         return x1, z2, log_det_sum
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, x1, z2):
         y, log_det_sum = self.split.backward(x1,z2)
         for step in reversed(self.steps):
@@ -304,10 +332,10 @@ class GLOW(nn.Module):
         self.log_std.weight.data.zero_()
         self.log_std.bias.data.zero_()
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def forward(self, x):
         z_list = []
-        log_det_sum = 0
+        log_det_sum = 0.
         # Through levels
         #x.requires_grad=True
         for i,level in enumerate(self.levels):
@@ -334,7 +362,7 @@ class GLOW(nn.Module):
         z_list.append(z)
         return z_list, log_det_sum
 
-    @torch.cuda.amp.autocast()
+    #@torch.cuda.amp.autocast()
     def backward(self, z_list):
         print("Backwards pass")
         z = z_list[-1] # Get prior
